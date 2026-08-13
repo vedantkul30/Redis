@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redis: Hashes</title>
+    <style>
+        :root {
+            --sidebar-bg: #0f172a;
+            --sidebar-hover: #1e293b;
+            --sidebar-text: #94a3b8;
+            --sidebar-text-hover: #f8fafc;
+            --bg-color: #f1f5f9;
+            --card-bg: #ffffff;
+            --text-main: #334155;
+            --heading-color: #0f172a;
+            --primary-accent: #2563eb;
+            --code-bg: #1e293b;
+            --code-text: #e2e8f0;
+            --inline-code-bg: #e2e8f0;
+            --inline-code-text: #b91c1c;
+            --border-color: #e2e8f0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            line-height: 1.7;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: 280px;
+            height: 100vh;
+            background-color: var(--sidebar-bg);
+            position: fixed;
+            top: 0;
+            left: 0;
+            overflow-y: auto;
+            padding: 2rem 1rem;
+            box-sizing: border-box;
+            border-right: 1px solid #1e293b;
+        }
+
+        .sidebar h2 {
+            color: #ffffff;
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            padding-left: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar li {
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 0.75rem 1rem;
+            color: var(--sidebar-text);
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar a:hover {
+            background-color: var(--sidebar-hover);
+            color: var(--sidebar-text-hover);
+            padding-left: 1.25rem;
+        }
+
+        /* Main Content Area */
+        .content-wrapper {
+            margin-left: 280px;
+            padding: 3rem 5%;
+            width: calc(100% - 280px);
+            box-sizing: border-box;
+        }
+
+        .content {
+            background: var(--card-bg);
+            padding: 3rem 4rem;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        /* Typography */
+        h1, h2, h3, h4 {
+            color: var(--heading-color);
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-top: 0;
+            padding-bottom: 1rem;
+            border-bottom: 3px solid var(--primary-accent);
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-top: 1rem;
+        }
+
+        h3 {
+            font-size: 1.4rem;
+            color: var(--primary-accent);
+        }
+
+        h4 {
+            font-size: 1.1rem;
+            color: var(--heading-color);
+        }
+
+        p {
+            margin-bottom: 1.2rem;
+        }
+
+        strong {
+            color: var(--heading-color);
+        }
+
+        /* Code Blocks */
+        pre {
+            background-color: var(--code-bg);
+            color: var(--code-text);
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        code {
+            background-color: var(--inline-code-bg);
+            color: var(--inline-code-text);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+        }
+
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 2rem 0;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border: 1px solid var(--border-color);
+            vertical-align: top;
+        }
+
+        th {
+            background-color: #f8fafc;
+            color: var(--heading-color);
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        /* Lists */
+        ul, ol {
+            margin-bottom: 1.5rem;
+            padding-left: 2rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        hr {
+            border: 0;
+            border-top: 1px solid var(--border-color);
+            margin: 2rem 0;
+        }
+
+        /* Callouts / Highlight Box */
+        .highlight-box {
+            background-color: #eff6ff;
+            border-left: 4px solid var(--primary-accent);
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 900px) {
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+                padding: 1rem;
+            }
+            .content-wrapper {
+                margin-left: 0;
+                width: 100%;
+                padding: 1rem;
+            }
+            .content {
+                padding: 1.5rem;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Vertical Sidebar -->
+    <nav class="sidebar">
+        <h2>Contents</h2>
+        <ul>
+            <li><a href="#position">Position in the Course</a></li>
+            <li><a href="#overview">High-Level Overview</a></li>
+            <li><a href="#why-exists">Why This Concept Exists</a></li>
+            <li><a href="#internal-working">Internal Working</a></li>
+            <li><a href="#important-concepts">Important Concepts</a></li>
+            <li><a href="#practical-examples">Practical Examples</a></li>
+            <li><a href="#java-implementation">Enterprise Java Implementation</a></li>
+            <li><a href="#trade-offs">Architectural Trade-Offs</a></li>
+            <li><a href="#complexity">Complexity Analysis</a></li>
+            <li><a href="#mistakes">Common Mistakes</a></li>
+            <li><a href="#interview-questions">Interview Questions</a></li>
+            <li><a href="#senior-notes">Senior Engineer Notes</a></li>
+            <li><a href="#connections">Connections to Previous Topics</a></li>
+            <li><a href="#takeaways">Key Takeaways</a></li>
+        </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="content-wrapper">
+        <div class="content">
+
+            <div id="intro">
+                <h1>Hashes in Redis: Core Commands and Client-Library Gotchas</h1>
+                <p><em>(Condensed notes — small/simple topic area per instructions)</em></p>
+                <hr>
+            </div>
+
+            <h2 id="position">Position in the Course</h2>
+            <ul>
+                <li><strong>Section:</strong> Hashes in Redis</li>
+                <li><strong>Lecture number(s):</strong> Corresponds to "Hashes in Redis" (intro), "Storing and Retrieving Hashes," "Numbers in Hashes," "Deleting Hash Data," "Slightly Unpredictable HSET and HGETALL," "Issues with HSET," and "Issues with HGETALL."</li>
+                <li><strong>Previously covered concepts:</strong> String commands (<code>SET</code>/<code>GET</code>/<code>MSET</code>/<code>MGET</code>/<code>DEL</code>/<code>GETRANGE</code>/<code>SETRANGE</code>/numeric increment commands), Redis design methodology (query-first modeling), key naming conventions, page caching implementation. Note: "Installing on MacOS" / "Installing on Windows" transcripts haven't been provided — no notes exist for those yet.</li>
+                <li><strong>Concepts intentionally omitted:</strong> Applying hashes to the e-commerce app's actual entities (users, items) — that's the next lecture group. No sets, sorted sets, or Lua scripting yet.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="overview">High-Level Overview</h2>
+            <p>A <strong>hash</strong> is Redis's flat key-value structure nested under a single top-level key — think "a JSON object with only string/number values, one level deep, no arrays, no nesting." Core commands: <code>HSET</code> (write), <code>HGET</code>/<code>HGETALL</code> (read one field / all fields), <code>HINCRBY</code>/<code>HINCRBYFLOAT</code> (atomic numeric updates on a field), <code>HSTRLEN</code>, <code>HKEYS</code>, <code>HVALS</code>, <code>HEXISTS</code>, <code>HDEL</code> (delete one field), and plain <code>DEL</code> (delete the whole hash).</p>
+
+            <p>The most important content in this unit isn't the commands themselves — it's two client-library gotchas that trip up almost everyone the first time they use hashes from application code (covered under Important Concepts).</p>
+
+            <hr>
+
+            <h2 id="why-exists">Why This Concept Exists</h2>
+            <p>Storing a record (a user, a company, a product) as several separate string keys (<code>user:1:name</code>, <code>user:1:age</code>, ...) works, but means N round trips to read or write N fields, and no natural grouping. A hash gives you <strong>one key that groups related fields together</strong>, matching the most common real-world need: "store/fetch info about one entity." It's the natural next step up from flat strings once your data has more than one attribute per record — while still avoiding the memory/complexity cost of storing arbitrary nested JSON as a string blob (which you'd have to fully deserialize just to read one field).</p>
+
+            <hr>
+
+            <h2 id="internal-working">Internal Working</h2>
+            <ul>
+                <li>Small hashes are stored internally as a compact <code>listpack</code> (a memory-efficient flat encoding); once a hash grows past configured thresholds (field count or value size), Redis converts it to a full hash table encoding. Either way, field lookup (<code>HGET</code>) is effectively <strong>O(1)</strong>.</li>
+                <li><code>HSET key f1 v1 f2 v2 ...</code> is O(N) for N field-value pairs written; returns the count of <strong>new</strong> fields added (not fields touched) — re-setting an existing field to a new value returns <code>0</code> for that field, since it's an update, not an addition.</li>
+                <li><code>HGETALL</code> is O(N) where N is the number of fields in the hash — it must return everything.</li>
+                <li><code>HINCRBY</code>/<code>HINCRBYFLOAT</code> are atomic, single-command read-modify-write on one field — same concurrency-safety rationale as <code>INCR</code> on plain strings. If the field doesn't exist yet, it's created starting from <code>0</code> before the increment is applied.</li>
+                <li>Over the wire, <code>HGETALL</code> returns a <strong>flat array</strong> (<code>[key1, val1, key2, val2, ...]</code>), not a nested object — client libraries (Node-Redis, Lettuce, Jedis) reassemble that array into a map/object for you. Worth knowing the raw wire format exists, since not every client or every command does this reassembly automatically.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="important-concepts">Important Concepts</h2>
+            
+            <h3>1. <code>HGETALL</code> on a non-existent key returns an <strong>empty object/map, not null</strong></h3>
+            <p>This is the single most important gotcha in this unit. If you <code>HGETALL</code> a key that was never created, Redis (and most clients) hand you back an empty map — not <code>null</code>, not an error. A naive existence check like <code>if (result) { ... } else { respond 404 }</code> will <strong>never</strong> trigger the 404 branch, because an empty object is still truthy in most languages. The correct check is to test whether the map has any entries (<code>map.isEmpty()</code> / <code>Object.keys(obj).length === 0</code>), not whether the map itself is falsy.</p>
+
+            <h3>2. Storing <code>null</code>/<code>undefined</code>-equivalent values breaks client-side serialization</h3>
+            <p>Redis hashes only store strings and numbers. When an application object has a field set to <code>null</code> or <code>undefined</code> (JavaScript) — or more generally, any value the client library can't safely coerce to a string — the client's serialization step can throw, because it tries to call something like <code>.toString()</code> on a value that doesn't support it. The fix is to never hand the client a <code>null</code>/<code>undefined</code> field directly: substitute an explicit sentinel (empty string, or a documented placeholder) and handle its meaning deliberately in your own code, since an empty string and "no value" are not automatically the same thing semantically.</p>
+
+            <h3>3. Nested objects get silently mangled, not rejected</h3>
+            <p>If a field's value is itself an object (not a string/number), most client libraries won't error — they'll call <code>.toString()</code> on it, which for a plain object typically produces a useless string. Redis hashes are <strong>flat by design</strong>: don't try to store nested structures directly; flatten them yourself (separate fields, separate keys, or JSON-encode the nested piece as a deliberate string value if you truly need to).</p>
+
+            <h3>4. <code>HEXISTS</code> checks field <em>existence</em>, not truthiness</h3>
+            <p><code>HEXISTS key field</code> returns <code>1</code> even if the field's stored value is <code>""</code>, <code>"0"</code>, or otherwise "falsy" in application terms — it only answers "is this field present in the hash," not "does it hold a meaningful value."</p>
+
+            <hr>
+
+            <h2 id="practical-examples">Practical Examples</h2>
+            <ul>
+                <li><strong>User profile records</strong> (Uber driver profile, LinkedIn profile summary): one hash per user (<code>user:#123</code>) holding name, city, rating — the textbook hash use case.</li>
+                <li><strong>Product catalog entries</strong> (Amazon/Shopify-style): one hash per SKU holding price, stock count, title — atomic price/stock updates via <code>HINCRBY</code> without touching unrelated fields.</li>
+                <li><strong>Discord user presence/status objects</strong>: small per-user hashes updated frequently (status, last-seen) benefit from field-level updates instead of rewriting a whole serialized blob.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="java-implementation">Enterprise Java Implementation</h2>
+
+<pre><code>@Service
+public class CompanyProfileService {
+
+    private final StringRedisTemplate redisTemplate;
+
+    public CompanyProfileService(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
+    public void saveCompany(String id, Map&lt;String, String&gt; fields) {
+        // HSET — Spring's HashOperations takes a Map directly, avoiding manual
+        // key/value alternation and avoiding the null/undefined pitfall as long
+        // as the map never contains a null value (validate before calling this).
+        redisTemplate.opsForHash().putAll("company:#" + id, fields);
+    }
+
+    public Optional&lt;Map&lt;Object, Object&gt;&gt; getCompany(String id) {
+        Map&lt;Object, Object&gt; result = redisTemplate.opsForHash().entries("company:#" + id);
+        // Correct existence check: Spring/Lettuce also returns an empty map for a
+        // missing key, exactly like the HGETALL gotcha described above — never
+        // treat the map itself as the truthiness signal.
+        return result.isEmpty() ? Optional.empty() : Optional.of(result);
+    }
+
+    public void incrementAge(String id, long amount) {
+        redisTemplate.opsForHash().increment("company:#" + id, "age", amount);
+    }
+
+    public boolean fieldExists(String id, String field) {
+        return redisTemplate.opsForHash().hasKey("company:#" + id, field);
+    }
+
+    public void deleteField(String id, String field) {
+        redisTemplate.opsForHash().delete("company:#" + id, field);
+    }
+}</code></pre>
+
+            <p><strong>Notes:</strong> Java's static typing sidesteps the <code>null</code>/<code>undefined</code>-serialization crash from the transcript — a <code>Map&lt;String, String&gt;</code> simply won't compile with a <code>null</code> value passed carelessly in most idiomatic code paths, but it's still possible to pass a <code>null</code> string deliberately, so validate/sanitize input maps before calling <code>putAll</code>. The empty-map-on-missing-key behavior, however, is identical in Java — this is a Redis/protocol-level behavior, not a JavaScript-specific quirk, so the <code>isEmpty()</code> check above is required regardless of language.</p>
+
+            <hr>
+
+            <h2 id="trade-offs">Architectural Trade-Offs</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Approach</th>
+                        <th>Advantages</th>
+                        <th>Disadvantages</th>
+                        <th>Suitable scenarios</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Separate string keys per field</td>
+                        <td>Simple, no gotchas</td>
+                        <td>N round trips to read/write a full record; no grouping</td>
+                        <td>Very few fields, rarely read together</td>
+                    </tr>
+                    <tr>
+                        <td>Hash per entity</td>
+                        <td>One key per record; atomic per-field updates; groups related data</td>
+                        <td>Flat only — no nested structures/arrays; <code>HGETALL</code> empty-map gotcha</td>
+                        <td>Standard "record with a handful of scalar fields" use case (users, products)</td>
+                    </tr>
+                    <tr>
+                        <td>JSON string blob per entity</td>
+                        <td>Supports arbitrary nesting</td>
+                        <td>Must deserialize/reserialize the whole blob to change one field; no atomic single-field update</td>
+                        <td>Deeply nested or highly variable-shape data</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <hr>
+
+            <h2 id="complexity">Complexity Analysis</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Command</th>
+                        <th>Time Complexity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>HSET</code></td>
+                        <td>O(N) for N field-value pairs</td>
+                    </tr>
+                    <tr>
+                        <td><code>HGET</code></td>
+                        <td>O(1)</td>
+                    </tr>
+                    <tr>
+                        <td><code>HGETALL</code></td>
+                        <td>O(N), N = total fields in hash</td>
+                    </tr>
+                    <tr>
+                        <td><code>HINCRBY</code> / <code>HINCRBYFLOAT</code></td>
+                        <td>O(1)</td>
+                    </tr>
+                    <tr>
+                        <td><code>HEXISTS</code></td>
+                        <td>O(1)</td>
+                    </tr>
+                    <tr>
+                        <td><code>HDEL</code></td>
+                        <td>O(1) per field removed</td>
+                    </tr>
+                    <tr>
+                        <td><code>DEL</code> (whole hash)</td>
+                        <td>O(N) — must free every field</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <hr>
+
+            <h2 id="mistakes">Common Mistakes</h2>
+            <ul>
+                <li>Checking <code>if (hashResult)</code> instead of checking for an empty map to detect a missing key.</li>
+                <li>Passing <code>null</code>/<code>undefined</code> fields into a hash-set call without sanitizing them first.</li>
+                <li>Trying to store a nested object or array as a hash field value instead of flattening the data model.</li>
+                <li>Confusing <code>HEXISTS</code> (field presence) with a truthiness check on the field's value.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="interview-questions">Interview Questions</h2>
+            <ul>
+                <li>What does <code>HGETALL</code> return for a key that doesn't exist, and why is that behavior easy to get wrong in application code?</li>
+                <li>Why can't Redis hashes store nested objects or arrays directly?</li>
+                <li>What's the difference between <code>HDEL</code> and plain <code>DEL</code> when working with a hash?</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="senior-notes">Senior Engineer Notes</h2>
+            <ul>
+                <li>Always write (or use a library helper for) an explicit "does this hash actually exist" check based on emptiness, never on truthiness — this is a one-line fix that prevents a whole class of silent 404-that-never-fires bugs.</li>
+                <li>Decide up front how your app will represent "no value" for a hash field (empty string vs. a sentinel vs. omitting the field entirely) and apply that convention consistently — Redis won't do this for you.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="connections">Connections to Previous Topics</h2>
+            <ul>
+                <li><code>HINCRBY</code>/<code>HINCRBYFLOAT</code> reuse the exact atomicity rationale established for <code>INCR</code>/<code>INCRBY</code> on plain strings — same single-threaded, single-round-trip safety argument, just scoped to one field of a hash.</li>
+                <li>The key-naming convention (<code>type#id</code>) from the page-caching lecture applies directly to hash keys (<code>company:#123</code>) — hashes are just another value type living under that same naming discipline.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="takeaways">Key Takeaways</h2>
+            <ul>
+                <li>A hash is a flat, one-level, string/number-only key-value structure nested under a single Redis key — ideal for "one record, several scalar fields."</li>
+                <li><code>HGETALL</code> on a missing key returns an <strong>empty object/map, not null</strong> — always check for emptiness, not truthiness.</li>
+                <li>Client libraries can choke on <code>null</code>/<code>undefined</code>/nested-object field values during serialization — sanitize and flatten before writing.</li>
+                <li><code>HINCRBY</code>/<code>HINCRBYFLOAT</code> give you the same atomic-update safety for hash fields that <code>INCR</code> gives plain strings.</li>
+                <li><code>HDEL</code> removes one field; plain <code>DEL</code> removes the entire hash.</li>
+            </ul>
+        </div>
+    </main>
+
+</body>
+</html>
