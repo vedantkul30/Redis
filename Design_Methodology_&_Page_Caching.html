@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redis Design Methodology & Page Caching</title>
+    <style>
+        :root {
+            --sidebar-bg: #0f172a;
+            --sidebar-hover: #1e293b;
+            --sidebar-text: #94a3b8;
+            --sidebar-text-hover: #f8fafc;
+            --bg-color: #f1f5f9;
+            --card-bg: #ffffff;
+            --text-main: #334155;
+            --heading-color: #0f172a;
+            --primary-accent: #2563eb;
+            --code-bg: #1e293b;
+            --code-text: #e2e8f0;
+            --inline-code-bg: #e2e8f0;
+            --inline-code-text: #b91c1c;
+            --border-color: #e2e8f0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            line-height: 1.7;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: 280px;
+            height: 100vh;
+            background-color: var(--sidebar-bg);
+            position: fixed;
+            top: 0;
+            left: 0;
+            overflow-y: auto;
+            padding: 2rem 1rem;
+            box-sizing: border-box;
+            border-right: 1px solid #1e293b;
+        }
+
+        .sidebar h2 {
+            color: #ffffff;
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            padding-left: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar li {
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 0.75rem 1rem;
+            color: var(--sidebar-text);
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar a:hover {
+            background-color: var(--sidebar-hover);
+            color: var(--sidebar-text-hover);
+            padding-left: 1.25rem;
+        }
+
+        /* Main Content Area */
+        .content-wrapper {
+            margin-left: 280px;
+            padding: 3rem 5%;
+            width: calc(100% - 280px);
+            box-sizing: border-box;
+        }
+
+        .content {
+            background: var(--card-bg);
+            padding: 3rem 4rem;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        /* Typography */
+        h1, h2, h3, h4 {
+            color: var(--heading-color);
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-top: 0;
+            padding-bottom: 1rem;
+            border-bottom: 3px solid var(--primary-accent);
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-top: 1rem;
+        }
+
+        h3 {
+            font-size: 1.4rem;
+            color: var(--primary-accent);
+        }
+
+        h4 {
+            font-size: 1.1rem;
+            color: var(--heading-color);
+        }
+
+        p {
+            margin-bottom: 1.2rem;
+        }
+
+        strong {
+            color: var(--heading-color);
+        }
+
+        /* Code Blocks */
+        pre {
+            background-color: var(--code-bg);
+            color: var(--code-text);
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        code {
+            background-color: var(--inline-code-bg);
+            color: var(--inline-code-text);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+        }
+
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 2rem 0;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border: 1px solid var(--border-color);
+            vertical-align: top;
+        }
+
+        th {
+            background-color: #f8fafc;
+            color: var(--heading-color);
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        /* Lists */
+        ul, ol {
+            margin-bottom: 1.5rem;
+            padding-left: 2rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        hr {
+            border: 0;
+            border-top: 1px solid var(--border-color);
+            margin: 2rem 0;
+        }
+
+        /* Callouts / Highlight Box */
+        .highlight-box {
+            background-color: #eff6ff;
+            border-left: 4px solid var(--primary-accent);
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 900px) {
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+                padding: 1rem;
+            }
+            .content-wrapper {
+                margin-left: 0;
+                width: 100%;
+                padding: 1rem;
+            }
+            .content {
+                padding: 1.5rem;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Vertical Sidebar -->
+    <nav class="sidebar">
+        <h2>Contents</h2>
+        <ul>
+            <li><a href="#position">Position in the Course</a></li>
+            <li><a href="#overview">High-Level Overview</a></li>
+            <li><a href="#why-exists">Why This Concept Exists</a></li>
+            <li><a href="#internal-working">Internal Working</a></li>
+            <li><a href="#important-concepts">Important Concepts</a></li>
+            <li><a href="#practical-examples">Practical Examples</a></li>
+            <li><a href="#java-implementation">Enterprise Java Implementation</a></li>
+            <li><a href="#trade-offs">Architectural Trade-Offs</a></li>
+            <li><a href="#complexity">Complexity Analysis</a></li>
+            <li><a href="#mistakes">Common Mistakes</a></li>
+            <li><a href="#interview-questions">Interview Questions</a></li>
+            <li><a href="#senior-notes">Senior Engineer Notes</a></li>
+            <li><a href="#connections">Connections to Previous Topics</a></li>
+            <li><a href="#takeaways">Key Takeaways</a></li>
+        </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="content-wrapper">
+        <div class="content">
+
+            <div id="intro">
+                <h1>Redis Design Methodology, Key Naming, and Page Caching Implementation</h1>
+                <hr>
+            </div>
+
+            <h2 id="position">Position in the Course</h2>
+            <ul>
+                <li><strong>Section:</strong> First Implementation Task (transition from "Essentials of Commands" into the e-commerce app build)</li>
+                <li><strong>Lecture number(s):</strong> Corresponds to "First Implementation Task," "Redis Design Methodology," "Key Naming Methodology," "Adding Page Caching," and "Better Key Generation" in the syllabus — presented together here because they form one continuous design-then-build unit.</li>
+                <li><strong>Previously covered concepts:</strong> <code>SET</code> and all its option groups (<code>EX</code>/<code>PX</code>/<code>NX</code>/<code>XX</code>/<code>GET</code>), the caching-driven motivation for expiration, <code>MSET</code>/<code>MSETNX</code>, <code>GET</code>/<code>MGET</code>/<code>DEL</code>, <code>GETRANGE</code>/<code>SETRANGE</code>, numeric commands and the concurrency motivation behind <code>INCR</code>. Note: this course also has "Redis Client Libraries," "Don't Skip This Video," and the "E-Commerce App Source Code Download" lectures positioned just before this unit in the syllabus — no transcript has been provided for those yet, so this knowledge base does not yet contain notes for them. If you provide those transcripts later, I'll slot them in retroactively rather than assume you've skipped them intentionally.</li>
+                <li><strong>Concepts intentionally omitted because they appear later:</strong> Hashes (as an alternative to plain string caching), pipelining, sets/sorted sets, and any discussion of RediSearch — even though this lecture introduces a "pound symbol" key-naming convention specifically to make a future search feature easier, the mechanics of that search feature are not explained yet and shouldn't be here either.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="overview">High-Level Overview</h2>
+            <p>This unit is the course's first real "let's build something" moment, and it's built around one core idea: <strong>in Redis, you design your data model by starting from your queries, not from your entities.</strong> This is presented as the single most important mental model shift in the entire course, so it gets extended treatment below.</p>
+
+            <p>Concretely, the lecture walks through:</p>
+            <ol>
+                <li>A <strong>design methodology</strong> for deciding what to store in Redis and how (data type, size budget, expiration policy, key naming, business logic).</li>
+                <li>A <strong>key naming convention</strong> (<code>type:identifier</code>, with a documented variant using <code>#</code> instead of <code>:</code> before a unique identifier, to make a future search feature easier to implement).</li>
+                <li>A working <strong>page-caching feature</strong>: cache the rendered HTML of certain routes (about, privacy, sign-in, sign-up) using a plain <code>SET</code>/<code>GET</code>, with a TTL, while deliberately <em>not</em> caching per-user dynamic pages (dashboard, auction detail).</li>
+                <li>A <strong>key-generation helper</strong> pattern: centralize key-string construction in one small module/class of functions instead of hand-building strings inline everywhere, to eliminate typo-driven cache-miss bugs.</li>
+            </ol>
+
+            <hr>
+
+            <h2 id="why-exists">Why This Concept Exists</h2>
+            
+            <p><strong>Why "queries first, schema second"?</strong> In a relational database, you normalize your data into tables based on the <em>entities</em> in your domain (users, items, orders), and the query planner figures out how to satisfy arbitrary queries against that shape at query time. Redis has no query planner. There is no <code>WHERE</code>, no <code>JOIN</code>, no ad-hoc filtering across a large keyspace. Every Redis data structure only supports the specific access patterns its command set provides (get/set a key, scan a set, get a range of a sorted set, etc.). This means if you design your Redis schema the way you'd design a SQL schema — organized around entities — you will very likely end up with a shape that cannot efficiently answer the actual questions your application needs to ask. So the methodology inverts the normal process: <strong>enumerate your access patterns first, and only then decide on a data type and key layout that satisfies exactly those patterns and nothing more.</strong></p>
+
+            <p><strong>Why cache rendered HTML at all?</strong> Server-side rendering (generating a full HTML document per request) is CPU and template-engine work that's identical for identical inputs. If the underlying content doesn't change per-request (a static "About" page) or doesn't change per-user, doing that work over and over for every single request wastes CPU for zero benefit. Storing the fully rendered output as a string in Redis turns "regenerate the page" into "look up a key" — trading a template-render operation for an O(1) in-memory lookup.</p>
+
+            <p><strong>Why not cache everything?</strong> This is the size-budget half of the methodology, and it's the part beginners skip. Redis holds all of its data in RAM. RAM is finite and comparatively expensive versus disk. A page that's identical for every user (about/privacy/sign-in/sign-up) costs you <em>one copy</em> regardless of how many users you have. A page that's different per user (a personalized dashboard) costs you <em>one copy per user</em>, and that cost scales linearly with your user base — potentially into the hundreds of megabytes or gigabytes for a large product. The lecture's back-of-envelope math (57.1 KB per page × page count × user count) is the exact kind of capacity planning a production engineer needs to do before flipping on a caching layer, not after.</p>
+
+            <p><strong>Why a specific key-naming convention?</strong> Keys in Redis live in one giant flat namespace — there's no concept of a "table" to scope names within. Without a convention, two different features can accidentally collide on the same key name, or an engineer six months from now can look at a key like <code>sign-in</code> and have no idea what it represents, whether it's safe to delete, or what created it. The <code>type:identifier</code> (or <code>type#identifier</code>) pattern turns key names into self-documenting, colon/pound-delimited paths — similar in spirit to how URL paths or Java package names create a readable hierarchy out of flat strings.</p>
+
+            <p><strong>Why centralize key generation in helper functions?</strong> Because a key name is a piece of code that has to match <em>exactly</em> everywhere it's used, hand-typing the same string template in multiple files is a classic single-point-of-failure: one typo in one file silently breaks a <code>GET</code> (it just returns <code>nil</code>, not an error) while the corresponding <code>SET</code> elsewhere keeps working fine. Centralizing key construction into one function per key "shape" turns a stringly-typed correctness problem into a compiler-checked function-signature problem.</p>
+
+            <hr>
+
+            <h2 id="internal-working">Internal Working</h2>
+            <p>There's limited new Redis <em>internals</em> here (the underlying commands are the <code>SET</code>/<code>GET</code> you already know), so this section focuses on the operational mechanics of the design process itself and how it maps onto system behavior:</p>
+
+            <ul>
+                <li><strong>Memory/capacity implication of per-user vs. shared caching:</strong> shared/static content → O(1) memory relative to user count; per-user dynamic content → O(N) memory relative to user count. This is the single most important arithmetic fact to internalize before caching <em>anything</em>.</li>
+                <li><strong>TTL as a staleness bound, not a correctness mechanism:</strong> setting <code>EX 2</code> (2 seconds, for testing) vs. a much longer production TTL (minutes/hours/days) doesn't make the cached content "correct" at all times — it bounds <em>how long</em> stale content can be served after the underlying source changes. Choosing the TTL is a business decision (how tolerant is this page to being briefly out of date?), not a technical one.</li>
+                <li><strong>Key layout as an access-pattern contract:</strong> once you choose <code>page-cache#/about</code> as your key shape, you've implicitly committed to "the route path is the unique identifier for a cached page." Any future feature that needs to look up cached pages by anything other than route (e.g., "invalidate all cached pages created before X") will not be served by this key shape and would need either a redesign or an auxiliary index — a preview of a limitation you'll see recur constantly in Redis modeling.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="important-concepts">Important Concepts</h2>
+            
+            <h3>1. The Redis Design Methodology (multi-perspective — flagged by the instructor as the most important idea in the course)</h3>
+            <p><strong>Beginner perspective:</strong> Don't start by asking "what are my objects?" Start by asking "what am I going to look up, and by what?" Only then pick a data type.</p>
+            <p><strong>Backend engineer perspective:</strong> This is the same discipline as designing a REST API around client needs rather than around your database schema — you're modeling access patterns, not entities.</p>
+            <p><strong>Distributed systems perspective:</strong> Because Redis (in the default single-instance/cluster-key-based model) offers only key-based lookups and a small number of structure-specific query shapes (ranges, set membership, sorted-set ranking), any access pattern not anticipated at design time either requires a full keyspace scan (expensive, and dangerous in production — <code>KEYS *</code>/<code>SCAN</code> over a large keyspace competes with your single command-processing thread) or a schema change and data migration.</p>
+            <p><strong>System design perspective:</strong> This methodology is essentially the same principle behind designing DynamoDB or other key-value/wide-column NoSQL schemas: <strong>access-pattern-first modeling</strong>. If you've worked with DynamoDB single-table design, this will feel very familiar — the two systems arrived at similar design disciplines for similar structural reasons (no ad hoc query engine, need to bake access patterns into key/attribute layout up front).</p>
+            <p><strong>Production perspective:</strong> Getting this wrong doesn't usually blow up immediately — it blows up six months later when product wants a new feature ("show me all cached pages older than a week") that your key layout has no efficient way to answer, forcing either a slow full-keyspace scan in production or a redesign and backfill under time pressure.</p>
+
+            <h3>2. Deciding what to cache: a size-budget exercise, not a gut call</h3>
+            <p>The lecture's calculation is a template worth reusing on the job:</p>
+<pre><code>memory per page × number of distinct cached variants = total cache footprint</code></pre>
+            <p>For shared/static pages: <code>variants = number of distinct pages</code>.<br>
+            For per-user pages: <code>variants = number of distinct pages × number of users</code>.</p>
+            <p>This single distinction is often the deciding factor in whether a page belongs in a full-page cache at all, versus needing a more granular caching strategy (e.g., caching just the expensive sub-components of a personalized page, which isn't covered yet in this course but is the natural next question once you hit this wall).</p>
+
+            <h3>3. Key naming convention</h3>
+            <ul>
+                <li>Pattern: <code>{type}:{identifier}</code>, e.g. <code>users:45</code>, <code>items:19</code>.</li>
+                <li>Multiple segments allowed: <code>users:posts:91</code> to express "posts belonging to a user."</li>
+                <li><strong>This course's variant:</strong> replace the colon immediately before a <em>unique identifier</em> with <code>#</code>, e.g. <code>page-cache#/about</code>, reserving <code>:</code> for structural/grouping segments. This is explicitly called out as a non-standard twist done to simplify a future RediSearch-based search feature (not yet covered) — not a general Redis best practice you'd necessarily see elsewhere. Functionally, Redis treats <code>:</code> and <code>#</code> identically; they're just bytes in a string key.</li>
+            </ul>
+
+            <h3>4. Selective caching logic</h3>
+            <p>Only specific routes are cached (about, privacy, sign-in, sign-up) via an explicit allow-list check (<code>if (cacheableRoutes.contains(route))</code>) — dashboards and auction-detail pages are deliberately excluded because they're either per-user or need to reflect near-real-time state (e.g., a hotly contested auction). This is a deliberate, explicit business rule, not something Redis infers for you — Redis has no idea which routes are "cacheable"; that judgment lives entirely in your application code.</p>
+
+            <h3>5. Centralized key-generation functions</h3>
+            <p>Instead of inline string concatenation (<code>"page-cache#" + route</code>) scattered across the codebase, wrap key construction in a single function (e.g., <code>pageCacheKey(route)</code>) that every read and write path calls. This guarantees the <code>GET</code> and <code>SET</code> sides always agree on the exact key shape, and gives you one place to change the key format later if needed.</p>
+
+            <hr>
+
+            <h2 id="practical-examples">Practical Examples</h2>
+            <ul>
+                <li><strong>Netflix / Hulu marketing pages:</strong> Static, high-traffic pages (landing page, help center articles) are prime full-page-cache candidates for exactly the reason given here — identical content per user, so caching cost stays flat regardless of subscriber count.</li>
+                <li><strong>LinkedIn feed vs. LinkedIn "About LinkedIn" page:</strong> The feed is deeply per-user and time-sensitive (exactly like the dashboard/auction example) and would need a completely different caching strategy (partial fragment caching, short TTLs, per-user keys) — while a company "About" page behaves like the static routes in this lecture.</li>
+                <li><strong>Stripe's documentation pages:</strong> Same content for every visitor, rarely updated — a textbook case for the shared-key, longer-TTL pattern described here.</li>
+                <li><strong>Discord server invite landing pages:</strong> Rendered server preview pages are effectively static per server for short windows and are commonly cached with a TTL for exactly the performance reason given in this lecture — avoiding repeated expensive render/lookup work for a page that doesn't change every few seconds.</li>
+                <li><strong>GitHub's repository README rendering:</strong> GitHub caches rendered Markdown-to-HTML output because re-parsing and re-rendering Markdown on every single page view for a popular repo would be wasteful — directly analogous to the "don't regenerate HTML you've already generated" motivation here.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="java-implementation">Enterprise Java Implementation</h2>
+            <p>The course example uses a SvelteKit (server-side-rendered JavaScript) app; here's the same feature in a Java/Spring Boot server-side rendering context (e.g., Spring MVC with Thymeleaf), which is the realistic enterprise equivalent.</p>
+
+            <h3>Key generation (centralized, typo-proof)</h3>
+<pre><code>@Component
+public class RedisKeyGenerator {
+
+    private static final String PAGE_CACHE_PREFIX = "page-cache#";
+
+    public String pageCacheKey(String route) {
+        return PAGE_CACHE_PREFIX + route;
+    }
+}</code></pre>
+
+            <h3>Page cache service</h3>
+<pre><code>@Service
+public class PageCacheService {
+
+    private static final Duration CACHE_TTL = Duration.ofMinutes(30); // production value;
+                                                                       // use a short value like 2s only in tests
+
+    private static final Set&lt;String&gt; CACHEABLE_ROUTES = Set.of(
+            "/about", "/privacy", "/sign-in", "/sign-up"
+    );
+
+    private final StringRedisTemplate redisTemplate;
+    private final RedisKeyGenerator keyGenerator;
+
+    public PageCacheService(StringRedisTemplate redisTemplate, RedisKeyGenerator keyGenerator) {
+        this.redisTemplate = redisTemplate;
+        this.keyGenerator = keyGenerator;
+    }
+
+    public Optional&lt;String&gt; getCachedPage(String route) {
+        if (!CACHEABLE_ROUTES.contains(route)) {
+            return Optional.empty();
+        }
+        String key = keyGenerator.pageCacheKey(route);
+        return Optional.ofNullable(redisTemplate.opsForValue().get(key));
+    }
+
+    public void setCachedPage(String route, String renderedHtml) {
+        if (!CACHEABLE_ROUTES.contains(route)) {
+            return;
+        }
+        String key = keyGenerator.pageCacheKey(route);
+        redisTemplate.opsForValue().set(key, renderedHtml, CACHE_TTL);
+    }
+}</code></pre>
+
+            <h3>Usage in a controller</h3>
+<pre><code>@Controller
+public class StaticPageController {
+
+    private final PageCacheService pageCacheService;
+    private final TemplateRenderer templateRenderer; // your rendering layer
+
+    public StaticPageController(PageCacheService pageCacheService, TemplateRenderer templateRenderer) {
+        this.pageCacheService = pageCacheService;
+        this.templateRenderer = templateRenderer;
+    }
+
+    @GetMapping("/about")
+    public ResponseEntity&lt;String&gt; about() {
+        return pageCacheService.getCachedPage("/about")
+                .map(html -&gt; ResponseEntity.ok().body(html))
+                .orElseGet(() -&gt; {
+                    String rendered = templateRenderer.render("about");
+                    pageCacheService.setCachedPage("/about", rendered);
+                    return ResponseEntity.ok().body(rendered);
+                });
+    }
+}</code></pre>
+
+            <p><strong>What this does and why:</strong></p>
+            <ul>
+                <li><code>CACHEABLE_ROUTES</code> is the Java equivalent of the course's <code>cacheRoutes</code> array — an explicit allow-list, checked before touching Redis at all, keeping the "which pages get cached" business decision visible and centralized.</li>
+                <li><code>RedisKeyGenerator</code> mirrors the course's <code>keys.ts</code> pattern — a single class responsible for producing every key shape used in the app, so a typo can only exist in one place and would be caught immediately (every caller breaks the same way, rather than one caller silently drifting).</li>
+                <li><code>opsForValue().set(key, value, ttl)</code> uses Spring Data Redis's <code>Duration</code>-based overload, which maps directly onto <code>SET key value EX seconds</code> under the hood via Lettuce.</li>
+                <li>Returning <code>Optional&lt;String&gt;</code> instead of <code>null</code> makes the "nothing cached" case explicit and forces callers to handle it, rather than relying on implicit null-checking discipline.</li>
+            </ul>
+
+            <p><strong>Alternative approaches / pitfalls:</strong></p>
+            <ul>
+                <li><strong>Spring's <code>@Cacheable</code> annotation</strong> (Spring Cache abstraction, with a Redis-backed <code>CacheManager</code>) can implement the exact same pattern declaratively:
+<pre><code>@Cacheable(value = "page-cache", key = "#route", condition = "#cacheableRoutes.contains(#route)")
+public String renderPage(String route) { ... }</code></pre>
+                This trades explicit control (you write the get/set/TTL logic yourself) for framework convenience (Spring manages the cache-aside pattern for you). The trade-off: <code>@Cacheable</code> is excellent for simple method-result caching, but once your caching logic has nuanced business rules (like the selective route allow-list here, or per-route TTLs), hand-rolled service code like above often ends up clearer and easier to reason about than SpEL conditions on an annotation.</li>
+                <li><strong>Common pitfall:</strong> forgetting to set a TTL at all (<code>redisTemplate.opsForValue().set(key, value)</code> with no duration) means the cached page never expires — if the underlying page content changes (a copy edit to the privacy policy), users would see stale content indefinitely until the key is manually deleted or the app is redeployed with a cache-clearing step.</li>
+                <li><strong>Common pitfall:</strong> applying this full-page cache pattern to a route that's actually per-user (like a dashboard) without realizing it — because Spring's <code>@Cacheable</code> by default keys only on method arguments, a careless key expression could easily fail to include the current user's identity, causing user A to see user B's cached dashboard. This is exactly the class of mistake the lecture's size/behavior analysis is designed to prevent by making you think about per-user vs. shared content <em>before</em> writing code.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="trade-offs">Architectural Trade-Offs</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Approach</th>
+                        <th>Advantages</th>
+                        <th>Disadvantages</th>
+                        <th>Suitable scenarios</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Cache shared/static rendered pages</td>
+                        <td>O(1) memory cost regardless of user count; big win for near-zero effort</td>
+                        <td>Only works for content identical across all users</td>
+                        <td>Marketing pages, legal pages, docs, sign-in/sign-up shells</td>
+                    </tr>
+                    <tr>
+                        <td>Cache per-user rendered pages</td>
+                        <td>Fast repeat loads for that specific user</td>
+                        <td>Memory cost scales linearly with user count; can blow up your Redis instance's memory budget</td>
+                        <td>Small user bases, or content that's expensive to compute but rarely viewed</td>
+                    </tr>
+                    <tr>
+                        <td>No caching for dynamic/contested content</td>
+                        <td>Always fresh, no staleness risk</td>
+                        <td>Full render cost paid on every request</td>
+                        <td>Dashboards, live auction pages, anything needing near-real-time accuracy</td>
+                    </tr>
+                    <tr>
+                        <td>Hand-rolled cache-aside service code (<code>get</code>/<code>render</code>/<code>set</code>)</td>
+                        <td>Full control over TTLs, allow-lists, and edge cases</td>
+                        <td>More boilerplate; each route needs explicit wiring</td>
+                        <td>Cases with per-route business rules (this lecture's exact scenario)</td>
+                    </tr>
+                    <tr>
+                        <td>Spring <code>@Cacheable</code> abstraction</td>
+                        <td>Declarative, less boilerplate, consistent pattern across the codebase</td>
+                        <td>Less flexible for nuanced conditional logic; easy to misconfigure cache keys</td>
+                        <td>Simple, uniform caching needs without complex per-case rules</td>
+                    </tr>
+                    <tr>
+                        <td>Inline string key construction</td>
+                        <td>Zero setup</td>
+                        <td>Highly typo-prone; <code>GET</code> on a mistyped key fails silently (<code>nil</code>), not an error</td>
+                        <td>Never recommended past a quick prototype</td>
+                    </tr>
+                    <tr>
+                        <td>Centralized key-generator functions/class</td>
+                        <td>Single source of truth for key shape; typo becomes a compile-time or immediately-visible runtime issue</td>
+                        <td>Slight indirection; must remember to route all key construction through it</td>
+                        <td>Any application beyond a toy example — this is the recommended default</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <hr>
+
+            <h2 id="complexity">Complexity Analysis</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Operation</th>
+                        <th>Time Complexity</th>
+                        <th>Network Overhead</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Cache lookup (<code>GET</code>)</td>
+                        <td>O(1)</td>
+                        <td>1 round trip</td>
+                        <td>Replaces a full template-render, which is comparatively expensive CPU work</td>
+                    </tr>
+                    <tr>
+                        <td>Cache write (<code>SET</code> with TTL)</td>
+                        <td>O(1)</td>
+                        <td>1 round trip</td>
+                        <td>Cost is paid once per unique variant, not once per request</td>
+                    </tr>
+                    <tr>
+                        <td>Route allow-list check</td>
+                        <td>O(1) (using a <code>Set</code>/hash-set membership check)</td>
+                        <td>None — pure in-application logic, no Redis call</td>
+                        <td>Always check this <em>before</em> hitting Redis, to avoid a wasted round trip for routes you'll never cache</td>
+                    </tr>
+                    <tr>
+                        <td>Memory footprint (shared page)</td>
+                        <td>O(P) where P = number of distinct pages</td>
+                        <td>—</td>
+                        <td>Independent of user count</td>
+                    </tr>
+                    <tr>
+                        <td>Memory footprint (per-user page)</td>
+                        <td>O(P × U) where U = number of users</td>
+                        <td>—</td>
+                        <td>This is the number that can spiral out of control and must be sized before committing to the approach</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <hr>
+
+            <h2 id="mistakes">Common Mistakes</h2>
+            
+            <p><strong>Beginner mistakes</strong></p>
+            <ul>
+                <li>Designing Redis keys the way you'd design SQL tables (organized by entity) instead of by query/access pattern.</li>
+                <li>Caching a page with no TTL at all, leading to permanently stale content after a content update.</li>
+                <li>Hand-typing key strings inline in multiple files instead of centralizing key construction.</li>
+            </ul>
+
+            <p><strong>Intermediate mistakes</strong></p>
+            <ul>
+                <li>Caching a per-user page as if it were shared content (using a key that doesn't include the user's identity), causing one user to see another user's cached content.</li>
+                <li>Choosing a TTL without thinking about the actual business tolerance for staleness — copying a "2 second" test value into production, or conversely picking an arbitrarily long TTL for content that does change periodically.</li>
+                <li>Not running the size-budget calculation before enabling caching on a page, only to discover in production that memory usage on the Redis instance has grown unexpectedly.</li>
+            </ul>
+
+            <p><strong>Production mistakes</strong></p>
+            <ul>
+                <li>Adding new cacheable routes over time without revisiting the original size-budget math — a page that was cheap to cache as a static page may later be redesigned to include personalized content, silently turning a flat O(P) cache into an O(P × U) one without anyone noticing until memory pressure shows up.</li>
+                <li>Using <code>KEYS pattern*</code> in production to inspect or manage cached keys instead of <code>SCAN</code> — a mistake that isn't unique to this feature but is an extremely common one once teams start accumulating many cache-prefixed keys and want to audit or clear them.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="interview-questions">Interview Questions</h2>
+
+            <p><strong>Basic</strong></p>
+            <ul>
+                <li>What does it mean to design a Redis schema by starting from your queries instead of your entities?</li>
+                <li>Why might you choose not to cache a personalized dashboard page the same way you'd cache a static "About" page?</li>
+            </ul>
+
+            <p><strong>Intermediate</strong></p>
+            <ul>
+                <li>Walk through how you'd estimate the memory footprint of caching a rendered page for every user in a system with 5 million users, given an average page size. What decision would that estimate drive?</li>
+                <li>Why is centralizing key generation into helper functions considered good practice in a Redis-backed application, given that Redis itself has no schema validation on key names?</li>
+            </ul>
+
+            <p><strong>Advanced</strong></p>
+            <ul>
+                <li>Compare the query-first Redis modeling discipline to single-table design in DynamoDB. Why do both systems converge on a similar methodology despite being architecturally different?</li>
+                <li>A team caches a page with <code>SET key value EX 2</code> in their test environment and later deploys to production with the same 2-second TTL by mistake. Walk through the operational consequences and how you'd catch this in code review or CI.</li>
+                <li>Design a key-naming and caching strategy for a page that is <em>mostly</em> shared content but includes one small per-user personalization (e.g., a "Welcome back, {name}" banner). What are your options, and what are the trade-offs of each?</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="senior-notes">Senior Engineer Notes</h2>
+            <ul>
+                <li>The "queries first" discipline is worth writing down explicitly as a team convention or an ADR (architecture decision record) the first time you introduce Redis into a codebase — new engineers coming from a SQL background will instinctively try to model entities, and it's much cheaper to correct that instinct in a design review than after a key layout is already in production with real data behind it.</li>
+                <li>Treat the size-budget calculation as a required step, not an optional nicety, any time someone proposes caching per-user content. A five-minute back-of-envelope calculation (page size × user count) has repeatedly saved teams from discovering a memory problem the hard way, during an incident, instead of during design.</li>
+                <li>Centralized key-generation utilities pay for themselves almost immediately and should be a day-one convention on any new Redis-backed service, not something retrofitted later — retrofitting means auditing every existing call site for key-format consistency, which is exactly the class of bug this pattern exists to prevent in the first place.</li>
+                <li>Be deliberate and explicit about TTL choices, and treat "no TTL" as a decision that requires justification, not a default. An un-expiring cache key for content that does occasionally change is one of the most common sources of "why is this user seeing old data" support tickets.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="connections">Connections to Previous Topics</h2>
+            <ul>
+                <li>This lecture is the first place the course applies the <code>SET</code>/<code>GET</code>/expiration knowledge from earlier lectures to a real, motivated use case — the news-headline caching example from the expiration-options lecture was a hypothetical walkthrough; this page-caching feature is the same pattern (cache-aside with TTL) built for real.</li>
+                <li>The TTL choice here (<code>EX</code> argument on <code>SET</code>) is a direct reuse of the expiration option group covered when you first learned <code>SET</code>'s three argument groups (expiration, conditional <code>NX</code>/<code>XX</code>, and <code>GET</code>).</li>
+                <li>The key-naming convention introduced here (<code>type:identifier</code> / <code>type#identifier</code>) is the foundational pattern you'll see reused and extended for every future feature in this course (hashes, sets, sorted sets) — this is the first and most important place to get it right, since every subsequent data-modeling decision builds on top of a consistent naming scheme.</li>
+                <li>The "avoid typo-prone inline strings" lesson connects conceptually to why <code>MGET</code>/<code>MSET</code> exist (batch operations reduce repeated, error-prone command construction) — both are examples of the course's broader theme that Redis rewards deliberate, engineered access patterns over ad hoc, repeated hand-written operations.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="takeaways">Key Takeaways</h2>
+            <ul>
+                <li>Redis schema design is <strong>query-first</strong>: enumerate your access patterns before choosing a data type or key layout — the exact opposite of SQL's normalize-then-query approach.</li>
+                <li>Before caching anything, run the size-budget math: shared/static content costs O(1) relative to user count; per-user content costs O(N) — this single distinction often decides whether full-page caching is even viable.</li>
+                <li>Use a consistent <code>type:identifier</code> key-naming convention (this course uses a <code>#</code> variant before unique identifiers, specifically to support a future search feature) so that keys are self-documenting and collision-free.</li>
+                <li>Centralize key-string construction in one function/class per key shape to eliminate typo-driven bugs — a mistyped key doesn't error, it just silently returns <code>nil</code> on <code>GET</code>, making these bugs unusually hard to spot without this discipline.</li>
+                <li>TTL choice for a cache is a business decision about acceptable staleness, not a Redis technicality — always set one deliberately, and never let a test-environment TTL (like 2 seconds) leak into production by accident.</li>
+            </ul>
+        </div>
+    </main>
+
+</body>
+</html>
