@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redis: Retrieval and Range Commands</title>
+    <style>
+        :root {
+            --sidebar-bg: #0f172a;
+            --sidebar-hover: #1e293b;
+            --sidebar-text: #94a3b8;
+            --sidebar-text-hover: #f8fafc;
+            --bg-color: #f1f5f9;
+            --card-bg: #ffffff;
+            --text-main: #334155;
+            --heading-color: #0f172a;
+            --primary-accent: #2563eb;
+            --code-bg: #1e293b;
+            --code-text: #e2e8f0;
+            --inline-code-bg: #e2e8f0;
+            --inline-code-text: #b91c1c;
+            --border-color: #e2e8f0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            line-height: 1.7;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: 280px;
+            height: 100vh;
+            background-color: var(--sidebar-bg);
+            position: fixed;
+            top: 0;
+            left: 0;
+            overflow-y: auto;
+            padding: 2rem 1rem;
+            box-sizing: border-box;
+            border-right: 1px solid #1e293b;
+        }
+
+        .sidebar h2 {
+            color: #ffffff;
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            padding-left: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar li {
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 0.75rem 1rem;
+            color: var(--sidebar-text);
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar a:hover {
+            background-color: var(--sidebar-hover);
+            color: var(--sidebar-text-hover);
+            padding-left: 1.25rem;
+        }
+
+        /* Main Content Area */
+        .content-wrapper {
+            margin-left: 280px;
+            padding: 3rem 5%;
+            width: calc(100% - 280px);
+            box-sizing: border-box;
+        }
+
+        .content {
+            background: var(--card-bg);
+            padding: 3rem 4rem;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        /* Typography */
+        h1, h2, h3, h4 {
+            color: var(--heading-color);
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-top: 0;
+            padding-bottom: 1rem;
+            border-bottom: 3px solid var(--primary-accent);
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-top: 1rem;
+        }
+
+        h3 {
+            font-size: 1.4rem;
+            color: var(--primary-accent);
+        }
+
+        h4 {
+            font-size: 1.1rem;
+            color: var(--heading-color);
+        }
+
+        p {
+            margin-bottom: 1.2rem;
+        }
+
+        strong {
+            color: var(--heading-color);
+        }
+
+        /* Code Blocks */
+        pre {
+            background-color: var(--code-bg);
+            color: var(--code-text);
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        code {
+            background-color: var(--inline-code-bg);
+            color: var(--inline-code-text);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+        }
+
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 2rem 0;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border: 1px solid var(--border-color);
+            vertical-align: top;
+        }
+
+        th {
+            background-color: #f8fafc;
+            color: var(--heading-color);
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        /* Lists */
+        ul, ol {
+            margin-bottom: 1.5rem;
+            padding-left: 2rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        hr {
+            border: 0;
+            border-top: 1px solid var(--border-color);
+            margin: 2rem 0;
+        }
+
+        /* Callouts / Highlight Box */
+        .highlight-box {
+            background-color: #eff6ff;
+            border-left: 4px solid var(--primary-accent);
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 900px) {
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+                padding: 1rem;
+            }
+            .content-wrapper {
+                margin-left: 0;
+                width: 100%;
+                padding: 1rem;
+            }
+            .content {
+                padding: 1.5rem;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Vertical Sidebar -->
+    <nav class="sidebar">
+        <h2>Contents</h2>
+        <ul>
+            <li><a href="#position">Position in the Course</a></li>
+            <li><a href="#overview">High-Level Overview</a></li>
+            <li><a href="#why-exists">Why This Concept Exists</a></li>
+            <li><a href="#internal-working">Internal Working</a></li>
+            <li><a href="#important-concepts">Important Concepts</a></li>
+            <li><a href="#practical-examples">Practical Examples</a></li>
+            <li><a href="#java-implementation">Enterprise Java Implementation</a></li>
+            <li><a href="#trade-offs">Architectural Trade-Offs</a></li>
+            <li><a href="#complexity">Complexity Analysis</a></li>
+            <li><a href="#mistakes">Common Mistakes</a></li>
+            <li><a href="#interview-questions">Interview Questions</a></li>
+            <li><a href="#senior-notes">Senior Engineer Notes</a></li>
+            <li><a href="#connections">Connections to Previous Topics</a></li>
+            <li><a href="#takeaways">Key Takeaways</a></li>
+        </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="content-wrapper">
+        <div class="content">
+
+            <div id="intro">
+                <h1>GET, MGET, DEL, GETRANGE, SETRANGE — Retrieval and Range Commands</h1>
+                <hr>
+            </div>
+
+            <h2 id="position">Position in the Course</h2>
+            <ul>
+                <li><strong>Section:</strong> Essentials of Commands (String Commands)</li>
+                <li><strong>Lecture number(s):</strong> Corresponds to "GET and MGET" and "String Ranges" in the syllabus, with DEL pulled in as bonus/related content in the same video.</li>
+                <li><strong>Previously covered concepts:</strong> <code>SET</code> and its option groups (<code>EX</code>/<code>PX</code>/<code>EXAT</code>/<code>PXAT</code>/<code>KEEPTTL</code>, <code>NX</code>/<code>XX</code>, <code>GET</code>), why keys expire (caching pattern), <code>SETEX</code>/<code>SETNX</code> as legacy equivalents of <code>SET ... EX</code> / <code>SET ... NX</code>, <code>MSET</code>/<code>MSETNX</code>, numeric commands (<code>INCR</code>/<code>DECR</code>/<code>INCRBY</code>/<code>DECRBY</code>/<code>INCRBYFLOAT</code>) and the concurrency motivation behind them (GET+SET race condition vs. atomic INCR, Redis's single-threaded command processing). You have also already seen the "furniture encoding" case study that uses <code>GETRANGE</code>/<code>SETRANGE</code>/<code>MGET</code> in a real design — this lecture is the mechanical foundation underneath that example, so some ground will feel familiar; the focus here is precision on <em>how</em> these commands behave, not re-justifying <em>why</em> you'd want compact encoded strings (you already have that context).</li>
+                <li><strong>Concepts intentionally omitted because they appear later:</strong> Pipelining (batching these calls into one round trip), hashes as an alternative to encoded strings, transactions/<code>WATCH</code>, Lua scripting, and any discussion of <code>OBJECT ENCODING</code> internals for strings (raw vs. embstr vs. int) beyond what's needed to explain complexity here.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="overview">High-Level Overview</h2>
+            <p>This lecture rounds out the "core string toolkit" with five commands, split into two groups:</p>
+
+            <p><strong>Plain retrieval / deletion:</strong></p>
+            <ul>
+                <li><code>GET key</code> — fetch a single value.</li>
+                <li><code>MGET key1 key2 ...</code> — fetch multiple values in one round trip (read-side counterpart to <code>MSET</code>).</li>
+                <li><code>DEL key</code> — remove a key and its value entirely, regardless of the data type stored there (works on strings, hashes, sets, lists, everything).</li>
+            </ul>
+
+            <p><strong>Substring operations:</strong></p>
+            <ul>
+                <li><code>GETRANGE key start end</code> — read a slice of a string value by byte index (inclusive on both ends).</li>
+                <li><code>SETRANGE key offset value</code> — overwrite part of a string value starting at a byte index, returning the new total length.</li>
+            </ul>
+
+            <p>On the surface, <code>GETRANGE</code>/<code>SETRANGE</code> look like toy string utilities. Their real value only shows up once you combine them with fixed-width encoding schemes — which you've already seen in the furniture catalog example. This lecture nails down the exact indexing rules, edge cases, and error behavior so you can use them correctly in that kind of design.</p>
+
+            <hr>
+
+            <h2 id="why-exists">Why This Concept Exists</h2>
+            <p><strong>GET/MGET/DEL</strong> exist because every data store needs basic read and delete primitives — nothing exotic here. The interesting design decision is <code>MGET</code>: exactly like <code>MSET</code>, it exists to <strong>collapse N network round trips into 1</strong>. If you need <code>color</code>, <code>model</code>, and <code>year</code> for a product, doing three separate <code>GET</code> calls means three TCP round trips to Redis, each paying network latency even though Redis itself would answer each in microseconds. <code>MGET</code> amortizes that latency cost across all keys in a single request/response cycle. In latency-sensitive systems (page caches, session lookups, product detail pages), this is often the single biggest lever you have before you even reach for pipelining.</p>
+
+            <p><strong>GETRANGE/SETRANGE</strong> exist because Redis strings are stored as <strong>byte arrays</strong>, and byte arrays support O(1) random access by offset. If your data has a <em>known, fixed layout</em> — e.g., "byte 0 is furniture type, byte 1 is color, byte 2 is material" — then you don't need to deserialize a whole object, mutate a field, and re-serialize it. You can reach directly into the stored bytes and read or write exactly the slice you care about. This is the same mental model as fixed-width binary record formats in systems programming (think: reading a struct field by byte offset instead of parsing a whole record). Redis just exposes that as a first-class command instead of making you fetch-modify-write the whole string.</p>
+
+            <hr>
+
+            <h2 id="internal-working">Internal Working</h2>
+            
+            <p><strong>GET</strong></p>
+            <ul>
+                <li>Redis looks up the key in its main hash table (the keyspace dictionary). If the value's type is not a string, Redis returns a <code>WRONGTYPE</code> error rather than silently coercing it.</li>
+                <li>Time complexity: <strong>O(1)</strong>.</li>
+            </ul>
+
+            <p><strong>MGET</strong></p>
+            <ul>
+                <li>Internally, this is just N independent dictionary lookups executed back-to-back while the server holds the single command-processing thread — but critically, it is <strong>one network round trip</strong>, not N.</li>
+                <li>For any key that does not exist, or exists but is not a string, <code>MGET</code> returns <code>nil</code> at that position in the response array rather than erroring out the whole command. This is an important behavioral difference from a naive loop of <code>GET</code> calls that might throw per-key — <code>MGET</code> degrades gracefully per-element.</li>
+                <li>Time complexity: <strong>O(N)</strong> where N is the number of keys requested — still a single round trip, so wall-clock latency is dominated by network overhead once, not N times.</li>
+            </ul>
+
+            <p><strong>DEL</strong></p>
+            <ul>
+                <li>Removes the key from the dictionary and frees the associated value's memory.</li>
+                <li>Works uniformly across all data types (string, hash, set, sorted set, list, stream) because deletion is a keyspace-level operation, not a type-level operation.</li>
+                <li>Time complexity: <strong>O(1)</strong> per key for simple types, but <strong>O(M)</strong> where M is the number of elements inside an aggregate type (a very large hash, set, or list) because Redis must free each internal element. This matters operationally: <code>DEL</code> on a truly enormous collection can briefly block the single Redis thread. (This is exactly why <code>UNLINK</code> exists as a non-blocking alternative that reclaims memory on a background thread — worth knowing as an operational fact, even though this lecture doesn't cover it yet.)</li>
+                <li><code>DEL</code> accepts multiple keys in one call (<code>DEL key1 key2 key3</code>) and returns the count of keys actually removed.</li>
+            </ul>
+
+            <p><strong>GETRANGE</strong></p>
+            <ul>
+                <li>Operates directly on the underlying byte buffer of the string.</li>
+                <li>Indexing is <strong>0-based and inclusive on both start and end</strong>. <code>GETRANGE key 0 2</code> returns bytes at index 0, 1, and 2 — three characters, not two.</li>
+                <li>Negative indices are supported and count from the end of the string (<code>-1</code> is the last byte), which mirrors Python-style slicing.</li>
+                <li>Out-of-range end indices are clamped to the string's actual length rather than erroring.</li>
+                <li>If the key doesn't exist, Redis treats it as an empty string and returns an empty string.</li>
+                <li>Time complexity: <strong>O(N)</strong> where N is the length of the returned substring (not the whole string) — Redis doesn't need to scan the full value, just copy out the requested byte range.</li>
+            </ul>
+
+            <p><strong>SETRANGE</strong></p>
+            <ul>
+                <li>Overwrites bytes starting at <code>offset</code>, extending the string if the write goes past the current end.</li>
+                <li>If <code>offset</code> is beyond the current string length, Redis <strong>zero-pads</strong> the gap with null bytes (<code>\x00</code>) before writing your value — so you can accidentally introduce null bytes into a string if you're not careful about offsets.</li>
+                <li>If the key doesn't exist at all, <code>SETRANGE</code> creates it (zero-padded up to <code>offset</code>, then your value written).</li>
+                <li>Returns the <strong>new total length</strong> of the string after the write — this is a small but important detail: it's not returning the value, it's returning length, so client code should not mistake the return value for the updated string.</li>
+                <li>Time complexity: <strong>O(M)</strong> where M is the length of the value being written, plus the cost of any memory reallocation if the string grows.</li>
+            </ul>
+
+            <div class="highlight-box">
+                <p><strong>Memory layout note:</strong> Short strings (roughly &le;44 bytes, depending on Redis version) are stored using an embedded encoding (<code>embstr</code>) that's immutable-in-place at the object level; Redis transparently converts to a raw, mutable buffer (<code>raw</code> encoding) once you perform an in-place mutation like <code>SETRANGE</code> or <code>APPEND</code>, or once the string exceeds that threshold. You don't have to manage this yourself, but it explains why <code>SETRANGE</code> on a freshly-<code>SET</code> short string might trigger an internal re-encoding rather than being a truly "free" in-place write every time.</p>
+            </div>
+
+            <hr>
+
+            <h2 id="important-concepts">Important Concepts</h2>
+            <ul>
+                <li><strong><code>MGET</code> is fault-tolerant per key, not per command.</strong> A single missing or wrong-typed key does not fail the whole batch — you get <code>nil</code> in that slot. Your application code must handle sparse results (e.g., iterating and checking for <code>null</code> per position) rather than assuming every position is populated.</li>
+                <li><strong><code>DEL</code> is type-agnostic.</strong> This is a conceptual shift from the string-specific commands you've seen so far — it's your first real signal that Redis's keyspace is a single flat namespace across all data structures, not five separate stores.</li>
+                <li><strong><code>GETRANGE</code>/<code>SETRANGE</code> indices are byte offsets, not character offsets.</strong> For ASCII data (like the single-character encoding scheme from the furniture example) this distinction is invisible. The moment you store UTF-8 text with multi-byte characters, byte offsets and "character positions" diverge, and slicing at the wrong boundary can split a multi-byte character in half, corrupting the string. This is a common production bug source when engineers assume string commands are Unicode-aware — they are not; Redis strings are just bytes.</li>
+                <li><strong>Zero-padding on <code>SETRANGE</code> is a silent behavior, not an error.</strong> Writing to an offset far beyond the current length "succeeds" and produces a much larger string full of null bytes. This is worth guarding against in application code (validate offsets against expected schema width) rather than trusting Redis to reject an out-of-bounds write — it won't.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="practical-examples">Practical Examples</h2>
+            <ul>
+                <li><strong>Amazon / e-commerce product catalogs:</strong> A product detail page needs <code>title</code>, <code>price</code>, <code>stock</code>, and <code>rating</code> for a single SKU — instead of four <code>GET</code> calls, one <code>MGET</code> fetches all four in one round trip, which matters enormously at Amazon's request volume where shaving one network hop per page view compounds into meaningful latency and infrastructure savings.</li>
+                <li><strong>Netflix personalization rows:</strong> Rendering a homepage row of "Continue Watching" requires progress data for 10–20 titles simultaneously. <code>MGET</code> across per-title keys avoids 10–20 sequential round trips before the row can render.</li>
+                <li><strong>Uber driver/rider session lookups:</strong> Multiple session attributes (auth token, last known location key, active trip ID) stored under separate keys can be fetched together with <code>MGET</code> when a request needs the full session picture at once.</li>
+                <li><strong>Banking/trading systems and fixed-width ledger encoding:</strong> Some high-throughput trading systems use fixed-width binary or character encodings for tick data or order flags (similar in spirit to the furniture example) precisely so that <code>GETRANGE</code>/<code>SETRANGE</code> can update a single flag or field without rewriting an entire record, minimizing both network payload and CPU for high-frequency updates.</li>
+                <li><strong>GitHub/Discord cache invalidation:</strong> <code>DEL</code> is the standard mechanism for invalidating a cached page, rendered comment tree, or computed aggregate the moment the underlying data changes — simpler and more explicit than relying purely on TTL expiration when you know exactly which cache entry is now stale.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="java-implementation">Enterprise Java Implementation</h2>
+
+            <h3>Using Spring Data Redis (<code>StringRedisTemplate</code>) with Lettuce</h3>
+
+<pre><code>@Service
+public class ProductCacheService {
+
+    private final StringRedisTemplate redisTemplate;
+
+    public ProductCacheService(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
+    // GET — single value
+    public String getProductField(String productId) {
+        return redisTemplate.opsForValue().get("product:" + productId);
+    }
+
+    // MGET — batch fetch, one round trip
+    public List&lt;String&gt; getMultipleProducts(List&lt;String&gt; productIds) {
+        List&lt;String&gt; keys = productIds.stream()
+                .map(id -&gt; "product:" + id)
+                .collect(Collectors.toList());
+        return redisTemplate.opsForValue().multiGet(keys);
+    }
+
+    // DEL — cache invalidation
+    public void invalidateProduct(String productId) {
+        redisTemplate.delete("product:" + productId);
+    }
+
+    // DEL — bulk invalidation
+    public void invalidateProducts(List&lt;String&gt; productIds) {
+        List&lt;String&gt; keys = productIds.stream()
+                .map(id -&gt; "product:" + id)
+                .collect(Collectors.toList());
+        redisTemplate.delete(keys);
+    }
+
+    // GETRANGE — read a byte slice of an encoded string
+    public String getEncodedSlice(String productId, long start, long end) {
+        return redisTemplate.opsForValue().get(
+                "product:" + productId, start, end);
+    }
+
+    // SETRANGE — overwrite part of an encoded string
+    public void updateEncodedField(String productId, long offset, String newValue) {
+        redisTemplate.opsForValue().set(
+                "product:" + productId, newValue, offset);
+    }
+}</code></pre>
+
+            <p><strong>What this does and why:</strong></p>
+            <ul>
+                <li><code>multiGet</code> maps directly onto <code>MGET</code> and is the correct API to reach for whenever you find yourself about to write a <code>for</code> loop calling <code>.get()</code> repeatedly — that loop pattern is a classic beginner performance bug in Spring Redis code.</li>
+                <li><code>delete(Collection&lt;String&gt; keys)</code> maps to a single <code>DEL key1 key2 ...</code> call, again avoiding a loop of individual deletes.</li>
+                <li>The two-argument and three-argument overloads of <code>opsForValue().get(key, start, end)</code> and <code>.set(key, value, offset)</code> map directly to <code>GETRANGE</code> and <code>SETRANGE</code> respectively — Spring Data Redis exposes these as overloads on the same <code>ValueOperations</code> interface rather than separate named methods, which is easy to miss if you only skim the common single-key <code>get</code>/<code>set</code> methods.</li>
+            </ul>
+
+            <p><strong>Alternative approaches / pitfalls:</strong></p>
+            <ul>
+                <li>Using <strong>Jedis</strong> directly (<code>jedis.mget(keys)</code>, <code>jedis.getrange(key, start, end)</code>, <code>jedis.setrange(key, offset, value)</code>) is common in simpler, non-Spring codebases or where you need very tight control over connection pooling, but you give up Spring's declarative connection/transaction management.</li>
+                <li>A common production mistake: calling <code>.get()</code> in a loop over a list of IDs instead of <code>.multiGet()</code>. This works correctly but silently reintroduces the N-round-trip cost <code>MGET</code> exists to eliminate — it's a performance bug, not a correctness bug, which makes it easy to miss in code review.</li>
+                <li>Another common mistake: assuming <code>SETRANGE</code>'s return value is the updated string. It is the <strong>new length</strong> (a <code>Long</code> in the Spring API context, though the fluent <code>set(key, value, offset)</code> overload here returns <code>void</code> — check the exact overload signature you're calling, since Lettuce's raw command does return length).</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="trade-offs">Architectural Trade-Offs</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Approach</th>
+                        <th>Advantages</th>
+                        <th>Disadvantages</th>
+                        <th>Suitable scenarios</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Individual <code>GET</code> calls in a loop</td>
+                        <td>Simple, obvious code</td>
+                        <td>N network round trips; latency scales with key count</td>
+                        <td>Prototyping, very low request volume, single-key lookups</td>
+                    </tr>
+                    <tr>
+                        <td><code>MGET</code></td>
+                        <td>One round trip regardless of key count; graceful per-key <code>nil</code> handling</td>
+                        <td>All keys must be strings; can't mix in hash/set fetches</td>
+                        <td>Fetching related string fields across multiple keys (product fields spread across keys, batch session lookups)</td>
+                    </tr>
+                    <tr>
+                        <td><code>DEL</code> per key</td>
+                        <td>Explicit, immediate cache invalidation</td>
+                        <td>Requires you to know exactly which keys are stale</td>
+                        <td>Precise invalidation after a known write (e.g., product updated)</td>
+                    </tr>
+                    <tr>
+                        <td>Relying on TTL expiration instead of <code>DEL</code></td>
+                        <td>No invalidation logic needed</td>
+                        <td>Stale data can be served until TTL lapses</td>
+                        <td>Data where brief staleness is acceptable (e.g., news headlines cache from the earlier lecture)</td>
+                    </tr>
+                    <tr>
+                        <td><code>GETRANGE</code>/<code>SETRANGE</code> on fixed-width encoded strings</td>
+                        <td>Extremely compact storage; O(1)-ish targeted field updates without full deserialize/reserialize</td>
+                        <td>Requires rigid, pre-agreed byte layout; brittle to schema changes; not human-readable; UTF-8 unsafe</td>
+                        <td>High-volume, fixed-schema data (encoded catalog attributes, flags, compact ledger-style records)</td>
+                    </tr>
+                    <tr>
+                        <td>Full string replace via <code>SET</code> for "field update"</td>
+                        <td>Simple, no offset math</td>
+                        <td>Must reconstruct entire value client-side even to change one field; larger payload over the network</td>
+                        <td>Small strings, infrequent updates, no fixed layout</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <hr>
+
+            <h2 id="complexity">Complexity Analysis</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Command</th>
+                        <th>Time Complexity</th>
+                        <th>Network Overhead</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td>O(1)</td>
+                        <td>1 round trip</td>
+                        <td>—</td>
+                    </tr>
+                    <tr>
+                        <td><code>MGET</code></td>
+                        <td>O(N) keys, single round trip</td>
+                        <td>1 round trip for N keys</td>
+                        <td>Latency ≈ 1 round trip regardless of N (up to payload-size effects)</td>
+                    </tr>
+                    <tr>
+                        <td><code>DEL</code></td>
+                        <td>O(1) per simple key; O(M) per aggregate-type key (M = element count)</td>
+                        <td>1 round trip for however many keys passed</td>
+                        <td>Can block on very large collections</td>
+                    </tr>
+                    <tr>
+                        <td><code>GETRANGE</code></td>
+                        <td>O(N) where N = length of returned slice</td>
+                        <td>1 round trip</td>
+                        <td>Cheaper than fetching + parsing the whole string client-side</td>
+                    </tr>
+                    <tr>
+                        <td><code>SETRANGE</code></td>
+                        <td>O(M) where M = length of written value (+ possible realloc cost)</td>
+                        <td>1 round trip</td>
+                        <td>Zero-padding on out-of-bounds offset adds to the string's new total length</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <hr>
+
+            <h2 id="mistakes">Common Mistakes</h2>
+            
+            <p><strong>Beginner mistakes</strong></p>
+            <ul>
+                <li>Looping over <code>GET</code> calls instead of using <code>MGET</code> when fetching several related keys at once.</li>
+                <li>Assuming <code>GETRANGE</code>/<code>SETRANGE</code> indices are character positions in all cases — fine for ASCII, wrong for multi-byte UTF-8.</li>
+                <li>Forgetting <code>SETRANGE</code>'s return value is a length, not the updated value, and trying to use it as such.</li>
+            </ul>
+
+            <p><strong>Intermediate mistakes</strong></p>
+            <ul>
+                <li>Using <code>SETRANGE</code> with an offset computed incorrectly (off-by-one in a fixed-width schema), silently corrupting an adjacent encoded field instead of the intended one.</li>
+                <li>Not handling <code>nil</code> entries from <code>MGET</code> — assuming all requested keys will always be present and populated, then hitting a <code>NullPointerException</code> downstream.</li>
+            </ul>
+
+            <p><strong>Production mistakes</strong></p>
+            <ul>
+                <li>Calling <code>DEL</code> on a huge aggregate-type key (a massive hash or set) on the hot path, causing a latency spike across the entire Redis instance because Redis is single-threaded and that deallocation work blocks everything else momentarily. (The correct production-grade fix, <code>UNLINK</code>, is covered later in the course.)</li>
+                <li>Building a fixed-width encoding scheme (like the furniture example) without a version byte or schema migration plan — once you have millions of compact encoded strings in production, changing the byte layout requires a full data migration, not just a code change.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="interview-questions">Interview Questions</h2>
+
+            <p><strong>Basic</strong></p>
+            <ul>
+                <li>What's the difference between <code>GET</code> and <code>MGET</code>?</li>
+                <li>What does <code>DEL</code> return, and what happens if the key doesn't exist?</li>
+            </ul>
+
+            <p><strong>Intermediate</strong></p>
+            <ul>
+                <li>Why does <code>MGET</code> return <code>nil</code> for missing keys instead of erroring out the whole call? What design goal does that serve?</li>
+                <li>Explain the indexing semantics of <code>GETRANGE</code> — is the end index inclusive or exclusive? What happens with negative indices?</li>
+            </ul>
+
+            <p><strong>Advanced</strong></p>
+            <ul>
+                <li>What happens internally when you <code>SETRANGE</code> a key at an offset far beyond its current length? What are the memory and correctness implications?</li>
+                <li>Why can <code>DEL</code> cause latency spikes in production, and what alternative command addresses this? (You can reference that <code>UNLINK</code> exists, even though it's covered fully later.)</li>
+                <li>Design a compact string-encoding scheme for a dataset with a small number of enum-like fields (similar to the furniture example), and explain how you'd use <code>GETRANGE</code>/<code>SETRANGE</code> to read and update individual fields. What are the risks of this approach as the schema evolves?</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="senior-notes">Senior Engineer Notes</h2>
+            <ul>
+                <li>Treat <code>MGET</code> as your default whenever a code path needs more than one related string key — it's one of the cheapest wins available in Redis-backed systems, and reviewers should flag sequential <code>GET</code> loops in PRs the same way they'd flag an N+1 query in SQL.</li>
+                <li>Fixed-width byte encoding with <code>GETRANGE</code>/<code>SETRANGE</code> is a powerful pattern, but it's also a long-term maintenance liability. Before adopting it in production, ask: <em>will this schema ever need a new field, a wider value range, or Unicode data?</em> If the answer is plausibly yes, consider a hash instead (covered next in the course) — you trade a bit of compactness for a much more forgiving schema evolution story.</li>
+                <li><code>DEL</code>'s blocking behavior on large aggregate types is one of those "invisible until it isn't" production landmines. If you're deleting keys that might hold large collections, treat it the same way you'd treat any potentially expensive operation on a single-threaded system — know your data sizes, or use the non-blocking alternative once you have it in your toolkit.</li>
+                <li>When debugging <code>SETRANGE</code>-related data corruption in production, the first thing to check is always: was this string ever exposed to non-ASCII input? Byte-offset bugs from UTF-8 are a recurring root cause in systems that adopted fixed-width Redis encoding without validating the character set of every field.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="connections">Connections to Previous Topics</h2>
+            <ul>
+                <li><code>MGET</code> is the direct read-side mirror of <code>MSET</code>, covered in the previous lecture — same motivation (batch multiple keys into one round trip), opposite direction (write vs. read).</li>
+                <li><code>GETRANGE</code>/<code>SETRANGE</code> are the mechanical commands underlying the furniture catalog encoding example you've already seen (<code>GETRANGE item:1 0 2</code>, <code>SETRANGE item:1 0 "BCD"</code>) — that example showed <em>why</em> you'd want this; this lecture nails down exactly <em>how</em> the indexing, padding, and error behavior work.</li>
+                <li><code>DEL</code> is your first command that behaves identically across every Redis data type — a preview of the fact that hashes, sets, sorted sets, lists, and streams (all coming up) all share the same flat keyspace and the same deletion semantics, even though their internal value encodings are completely different.</li>
+                <li>This continues the running theme from the numeric commands lecture: Redis provides purpose-built commands (<code>MGET</code>, <code>INCR</code>, <code>GETRANGE</code>) instead of making you compose primitives (loop of <code>GET</code>s, GET+parse+SET, fetch-whole-string-then-slice-client-side) precisely because the purpose-built version is faster, and in the <code>INCR</code> case, also correct under concurrency. <code>GETRANGE</code>/<code>SETRANGE</code> don't solve a concurrency problem the way <code>INCR</code> does, but they solve the same class of problem: minimizing round trips and payload size for narrow, targeted operations.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="takeaways">Key Takeaways</h2>
+            <ul>
+                <li><code>MGET</code> batches multiple string reads into a single round trip; it returns <code>nil</code> per missing/wrong-typed key rather than failing the whole command — your code must handle sparse results.</li>
+                <li><code>DEL</code> works across all data types and is O(1) for simple keys but can be O(M) and blocking for large aggregate types — a real production risk on a single-threaded server.</li>
+                <li><code>GETRANGE</code> and <code>SETRANGE</code> operate on <strong>byte offsets</strong>, are 0-based, and <code>GETRANGE</code>'s end index is <strong>inclusive</strong>. Negative indices count from the end.</li>
+                <li><code>SETRANGE</code> silently zero-pads gaps when writing past the current string length, and returns the new total length, not the value.</li>
+                <li>These range commands are only "useful" once paired with a deliberate fixed-width encoding scheme — on their own, applied to arbitrary strings, they offer little benefit and carry real UTF-8 safety risk.</li>
+            </ul>
+        </div>
+    </main>
+
+</body>
+</html>
