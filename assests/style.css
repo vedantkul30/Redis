@@ -1,104 +1,175 @@
+/* =========================
+   Base Page
+   ========================= */
+
 body {
-    max-width: 1200px;
-    margin: auto;
-    padding: 35px 25px;
-    font-family: Arial, sans-serif;
-    background: linear-gradient(to bottom right, #f8f9fa, #eef4ff);
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 25px;
+    font-family: Arial, Helvetica, sans-serif;
+    background: linear-gradient(135deg, #f8f9fa 0%, #eef4ff 100%);
     color: #222;
+    line-height: 1.6;
 }
 
-/* Main Title */
+
+/* =========================
+   Main Title
+   ========================= */
+
 h1 {
     text-align: center;
-    margin-bottom: 45px;
-    font-size: 2.4rem;
+    margin: 0 0 45px;
+    padding-bottom: 18px;
+
+    font-size: 2.5rem;
     font-weight: 700;
     color: #1d3557;
-    padding-bottom: 15px;
+
     border-bottom: 3px solid #dbe7ff;
 }
 
-/* Topic Group Card */
+
+/* =========================
+   Topic Card
+   ========================= */
+
 .topic {
-    background: white;
-    padding: 24px;
+    background: #ffffff;
+
+    padding: 25px 28px;
     margin-bottom: 28px;
+
     border-radius: 16px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    border: 1px solid #e4eaf3;
+
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.07);
+
+    transition:
+        transform 0.25s ease,
+        box-shadow 0.25s ease;
 }
 
 .topic:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+    transform: translateY(-3px);
+
+    box-shadow:
+        0 10px 25px rgba(0, 0, 0, 0.10);
 }
 
-/* Section Heading */
-h2 {
-    margin-top: 0;
-    margin-bottom: 20px;
-    color: #0b3d91;
-    font-size: 1.4rem;
-    font-weight: 700;
-    border-left: 6px solid #4f8cff;
+
+/* =========================
+   Topic Heading
+   ========================= */
+
+.topic h2 {
+    margin: 0 0 20px;
+
     padding-left: 14px;
+
+    font-size: 1.45rem;
+    font-weight: 700;
+
+    color: #0b3d91;
+
+    border-left: 5px solid #4f8cff;
 }
 
-/* Topic List */
+
+/* =========================
+   Subtopic List
+   ========================= */
+
 .subtopics {
     list-style: none;
-    padding-left: 0;
+
+    margin: 0;
+    padding: 0;
+
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+
+/* =========================
+   Subtopic Item
+   ========================= */
+
+.subtopics li {
     margin: 0;
 }
 
-/* Each Subtopic */
-.subtopics li {
-    margin: 12px 0;
-    padding: 0;
-    border-radius: 12px;
-    overflow: hidden;
-}
 
-/* Full Row Clickable */
+/* =========================
+   Subtopic Link
+   ========================= */
+
 .subtopics li a {
     display: block;
-    padding: 15px 18px;
-    background: #f4f7fc;
+
+    padding: 14px 18px;
+
+    background: #f5f8fc;
+
     color: #1565c0;
+
     text-decoration: none;
+    font-size: 1rem;
     font-weight: 500;
+
+    border-radius: 10px;
     border-left: 4px solid transparent;
-    transition: all 0.25s ease;
+
+    transition:
+        background 0.2s ease,
+        color 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.2s ease;
 }
 
-/* Hover Effects */
+
+/* =========================
+   Link Hover
+   ========================= */
+
 .subtopics li a:hover {
-    background: #e8f1ff;
-    border-left: 4px solid #4f8cff;
+    background: #eaf2ff;
+
     color: #0b3d91;
-    transform: translateX(6px);
+
+    border-left-color: #4f8cff;
+
+    transform: translateX(5px);
 }
 
-/* Mobile Responsive */
+
+/* =========================
+   Mobile Responsive
+   ========================= */
+
 @media (max-width: 768px) {
+
     body {
-        padding: 20px 15px;
+        padding: 25px 15px;
     }
 
     h1 {
-        font-size: 1.8rem;
-    }
-
-    h2 {
-        font-size: 1.15rem;
+        font-size: 2rem;
+        margin-bottom: 30px;
     }
 
     .topic {
-        padding: 18px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+
+    .topic h2 {
+        font-size: 1.25rem;
     }
 
     .subtopics li a {
-        padding: 13px 14px;
+        padding: 13px 15px;
         font-size: 0.95rem;
     }
 }
