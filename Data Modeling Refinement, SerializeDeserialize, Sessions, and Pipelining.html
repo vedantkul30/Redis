@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redis: Data Modeling Refinement, Serialize/Deserialize, Sessions, and Pipelining</title>
+    <style>
+        :root {
+            --sidebar-bg: #0f172a;
+            --sidebar-hover: #1e293b;
+            --sidebar-text: #94a3b8;
+            --sidebar-text-hover: #f8fafc;
+            --bg-color: #f1f5f9;
+            --card-bg: #ffffff;
+            --text-main: #334155;
+            --heading-color: #0f172a;
+            --primary-accent: #2563eb;
+            --code-bg: #1e293b;
+            --code-text: #e2e8f0;
+            --inline-code-bg: #e2e8f0;
+            --inline-code-text: #b91c1c;
+            --border-color: #e2e8f0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            line-height: 1.7;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: 280px;
+            height: 100vh;
+            background-color: var(--sidebar-bg);
+            position: fixed;
+            top: 0;
+            left: 0;
+            overflow-y: auto;
+            padding: 2rem 1rem;
+            box-sizing: border-box;
+            border-right: 1px solid #1e293b;
+        }
+
+        .sidebar h2 {
+            color: #ffffff;
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            padding-left: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar li {
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 0.75rem 1rem;
+            color: var(--sidebar-text);
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar a:hover {
+            background-color: var(--sidebar-hover);
+            color: var(--sidebar-text-hover);
+            padding-left: 1.25rem;
+        }
+
+        /* Main Content Area */
+        .content-wrapper {
+            margin-left: 280px;
+            padding: 3rem 5%;
+            width: calc(100% - 280px);
+            box-sizing: border-box;
+        }
+
+        .content {
+            background: var(--card-bg);
+            padding: 3rem 4rem;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        /* Typography */
+        h1, h2, h3, h4 {
+            color: var(--heading-color);
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-top: 0;
+            padding-bottom: 1rem;
+            border-bottom: 3px solid var(--primary-accent);
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-top: 1rem;
+        }
+
+        h3 {
+            font-size: 1.4rem;
+            color: var(--primary-accent);
+        }
+
+        h4 {
+            font-size: 1.1rem;
+            color: var(--heading-color);
+        }
+
+        p {
+            margin-bottom: 1.2rem;
+        }
+
+        strong {
+            color: var(--heading-color);
+        }
+
+        /* Code Blocks */
+        pre {
+            background-color: var(--code-bg);
+            color: var(--code-text);
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        code {
+            background-color: var(--inline-code-bg);
+            color: var(--inline-code-text);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+        }
+
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 2rem 0;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border: 1px solid var(--border-color);
+            vertical-align: top;
+        }
+
+        th {
+            background-color: #f8fafc;
+            color: var(--heading-color);
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        /* Lists */
+        ul, ol {
+            margin-bottom: 1.5rem;
+            padding-left: 2rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        hr {
+            border: 0;
+            border-top: 1px solid var(--border-color);
+            margin: 2rem 0;
+        }
+
+        /* Callouts / Highlight Box */
+        .highlight-box {
+            background-color: #eff6ff;
+            border-left: 4px solid var(--primary-accent);
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 900px) {
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+                padding: 1rem;
+            }
+            .content-wrapper {
+                margin-left: 0;
+                width: 100%;
+                padding: 1rem;
+            }
+            .content {
+                padding: 1.5rem;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Vertical Sidebar -->
+    <nav class="sidebar">
+        <h2>Contents</h2>
+        <ul>
+            <li><a href="#position">Position in the Course</a></li>
+            <li><a href="#overview">High-Level Overview</a></li>
+            <li><a href="#why-exists">Why This Concept Exists</a></li>
+            <li><a href="#internal-working">Internal Working</a></li>
+            <li><a href="#important-concepts">Important Concepts</a></li>
+            <li><a href="#practical-examples">Practical Examples</a></li>
+            <li><a href="#java-implementation">Enterprise Java Implementation</a></li>
+            <li><a href="#trade-offs">Architectural Trade-Offs</a></li>
+            <li><a href="#complexity">Complexity Analysis</a></li>
+            <li><a href="#mistakes">Common Mistakes</a></li>
+            <li><a href="#interview-questions">Interview Questions</a></li>
+            <li><a href="#senior-notes">Senior Engineer Notes</a></li>
+            <li><a href="#connections">Connections to Previous Topics</a></li>
+            <li><a href="#takeaways">Key Takeaways</a></li>
+        </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="content-wrapper">
+        <div class="content">
+
+            <div id="intro">
+                <h1>Data Modeling Refinement, Serialize/Deserialize Pattern, Sessions, and Pipelining</h1>
+                <p><em>(Notes focus on transferable concepts/commands/patterns from this project-driven lecture block — implementation narrative and app-specific field names are intentionally omitted per instructions.)</em></p>
+                <hr>
+            </div>
+
+            <h2 id="position">Position in the Course</h2>
+            <ul>
+                <li><strong>Section:</strong> Hashes in Redis → applying hashes in a real application</li>
+                <li><strong>Lecture number(s):</strong> Corresponds to "Reducing the Design to Queries," "What Data Type for Each Resource," "When to use Hashes," "Serialization and Deserialization," "Adding Serialize," "Implementing Sessions," "Serializing Date Times," "Batching Commands with Pipelines," "Running Multiple Commands at the Same Time," "Executing a Pipeline."</li>
+                <li><strong>Previously covered concepts:</strong> Hash commands (<code>HSET</code>, <code>HGET</code>, <code>HGETALL</code>, <code>HINCRBY</code>, <code>HEXISTS</code>, <code>HDEL</code>, plain <code>DEL</code>), the <code>HGETALL</code>-returns-empty-object-on-missing-key gotcha, client-library serialization pitfalls with <code>null</code>/nested values, the query-first Redis design methodology, key-naming conventions (<code>type#id</code>), centralized key-generation helper functions.</li>
+                <li><strong>Concepts intentionally omitted because they appear later:</strong> Sets and sorted sets (needed to solve the "find a hash by a non-ID field," "unique view counting," and "sort by multiple criteria" problems raised but not solved in this block), transactions/<code>WATCH</code>, Lua scripting.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="overview">High-Level Overview</h2>
+            <p>This block extends the query-first design methodology into a concrete decision framework for <strong>when a record should be modeled as a hash</strong>, then introduces two patterns you'll use constantly for the rest of the course:</p>
+
+            <ol>
+                <li><strong>Serialize / Deserialize</strong> — a convention (not a Redis feature) for explicitly converting application objects into Redis-safe primitives on write, and converting them back into properly-typed application objects on read.</li>
+                <li><strong>Pipelining</strong> — batching multiple independent Redis commands into a single network round trip.</li>
+            </ol>
+
+            <p>It also introduces <strong>sessions</strong> as the standard token-based mechanism for tracking "who is making this request" across stateless HTTP requests, built entirely out of hashes you already know how to use.</p>
+
+            <hr>
+
+            <h2 id="why-exists">Why This Concept Exists</h2>
+            
+            <p><strong>Refining "when to use a hash":</strong> Knowing hashes exist isn't the same as knowing when to reach for one. The methodology needs concrete decision criteria, otherwise every future data-modeling decision becomes guesswork.</p>
+
+            <p><strong>Serialize/Deserialize:</strong> Redis hash fields can only hold strings (numbers get stringified automatically, but nothing else does). Application-level objects routinely contain richer types — <code>Date</code>/<code>DateTime</code> objects, computed or redundant fields, or fields that simply shouldn't leak into storage. Without a deliberate conversion step, you either let the client library's default stringification behavior decide the on-disk format for you (often unqueryable, timezone-dependent, or nonsensical — e.g., a <code>Date</code> object's default <code>toString()</code>), or you scatter ad hoc conversion logic across every call site, which drifts out of sync over time. A single, explicit serialize function per record type keeps the write-shape consistent and intentional; a matching deserialize function keeps the read-shape consistent and correctly typed.</p>
+
+            <p><strong>Why drop the ID during serialization:</strong> The record's unique identifier is already encoded in the Redis key itself (<code>type#id</code>). Storing it again as a hash field is redundant — pure wasted memory with zero query benefit, since you can't do an ad hoc "find the hash where field X = Y" scan in Redis anyway. Deserialize re-adds the ID afterward (since the caller already knows it, having used it to build the key) so the rest of the application still gets a complete, ID-bearing object to work with.</p>
+
+            <p><strong>Why store dates as Unix-epoch integers instead of formatted strings:</strong> A formatted date string (e.g., a locale-formatted timestamp) is opaque to Redis — it can't be compared, ranged, or sorted numerically without extra parsing logic, and it silently bakes in a timezone assumption. An integer count of seconds or milliseconds since the Unix epoch is directly comparable and sortable as a plain number, and is what you'll need once you get to sorted sets and range queries later in the course. Millisecond resolution (rather than seconds) is chosen whenever tie-breaking at sub-second precision could matter (e.g., ordering competing near-simultaneous events).</p>
+
+            <p><strong>Why sessions exist:</strong> HTTP is stateless — the server doesn't inherently remember who you are between requests. A session token is a random, unguessable identifier the server hands back to the client after successful authentication; the client resends that token on every subsequent request, and the server looks it up (a simple hash keyed by the token) to recover "who is this." This offloads all the actual identity bookkeeping to the server's data store (Redis, here) instead of trusting anything the client claims about itself beyond that one opaque token.</p>
+
+            <p><strong>Why pipelining exists:</strong> Every individual Redis command, however fast Redis is internally, still pays one network round trip. Fetching N independent records with N sequential commands means paying that round-trip latency N times. Pipelining queues up all N commands and sends them in a single batch, so Redis processes them back-to-back server-side and returns all N results in one response — collapsing "N round trips" into "1 round trip, N units of server-side work." This is the direct generalization of the same idea behind <code>MGET</code>/<code>MSET</code>, except pipelining works across <strong>any mix of command types</strong>, not just get/set on plain strings.</p>
+
+            <hr>
+
+            <h2 id="internal-working">Internal Working</h2>
+            
+            <p><strong>IDs are not auto-generated by Redis.</strong> Unlike an auto-increment SQL primary key, Redis has no built-in identity/sequence mechanism for hash keys. The application is responsible for generating a sufficiently unique identifier (commonly a UUID or similarly random string) <em>before</em> constructing the key and writing the hash. This is a structural consequence of Redis being a simple key-value engine with no schema or table concept to hang an auto-increment counter off of.</p>
+
+            <p><strong>Serialize/deserialize are pure application-level functions</strong>, not a Redis or client-library feature — there's no special hook or annotation involved; it's just a naming convention for "the function that prepares data for storage" and "the function that reconstitutes data after retrieval." Because Redis hash values are always strings, deserialize always has to reverse the client library's automatic stringification of numbers (<code>parseInt</code>/<code>parseFloat</code> equivalents) in addition to any custom formatting your serialize step applied (like epoch-millis → Date object).</p>
+
+            <p><strong>Sessions are just another hash</strong>, keyed by the randomly generated session token instead of a domain entity's ID — structurally there is nothing new here beyond "use the token as the key." The interesting design point is that the token itself functions as a capability: possessing it is what "counts" as being authenticated for that request, so its generation must use a cryptographically strong random source, not a predictable counter.</p>
+
+            <p><strong>Pipelining internals:</strong> the client library queues up command byte-sequences locally without waiting for a response after each one, then flushes them all in one write to the socket. Redis reads and executes them in the order received (still one at a time — pipelining does not add concurrency inside Redis, since Redis remains single-threaded for command execution) and streams back one reply per command, in order. The client library then reassembles those replies into an ordered results array matching the order commands were queued. Because Redis is single-threaded, pipelining's win is purely about <strong>network round trips</strong>, not about parallel execution on the server — the server-side total work is the same either way.</p>
+
+            <ul>
+                <li><strong>Complexity:</strong> O(N) total command-processing work for N pipelined commands (same as N sequential calls), but <strong>O(1) round trips</strong> instead of O(N) — this is where the wall-clock latency win comes from, especially significant when per-round-trip network latency is much larger than Redis's per-command execution time (which is typically true).</li>
+                <li>Pipelines can freely <strong>mix different command types</strong> in one batch (<code>HGETALL</code>, <code>HSET</code>, <code>GET</code>, <code>DEL</code>, etc.) — there's no requirement that a pipeline be homogeneous.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="important-concepts">Important Concepts</h2>
+            
+            <h3>1. Decision framework: when to model a record as a hash</h3>
+            <p>Use a hash when a record satisfies most or all of:</p>
+            <ul>
+                <li>It has <strong>several distinct attributes</strong> naturally grouped together.</li>
+                <li>The typical access pattern fetches <strong>one whole record at a time</strong>, ideally in a single round trip.</li>
+                <li>You need to be able to <strong>sort or filter a collection of these records by several different attributes</strong> (this points toward pairing the hash with an auxiliary sorted structure later — not solved by hashes alone).</li>
+            </ul>
+
+            <p>Avoid a hash (favor a different structure, covered in future lectures) when the record is:</p>
+            <ul>
+                <li>Purely for <strong>counting or uniqueness enforcement</strong> (e.g., "has this user already performed this action").</li>
+                <li>A <strong>time series</strong> of changing values over time (a hash captures current state well, not a history).</li>
+                <li>Only ever needs <strong>one or two attributes</strong> total — a plain string key may be simpler and cheaper.</li>
+            </ul>
+
+            <h3>2. Serialize / Deserialize as a standing convention</h3>
+            <ul>
+                <li><strong>Serialize</strong> (write path): start from the domain object, strip out fields already implied by the key (like the ID), and convert any non-string/number types (dates, enums, etc.) into a Redis-safe representation (commonly epoch milliseconds for dates).</li>
+                <li><strong>Deserialize</strong> (read path): start from the raw hash (all string values), re-attach the ID (already known by the caller, since it was used to build the key), and convert each stringified field back to its proper application type (<code>parseInt</code>/<code>parseFloat</code> for numbers, epoch-millis → <code>Date</code>/<code>Instant</code> for timestamps).</li>
+                <li>Neither function is Redis-specific machinery — they're a <strong>naming convention for a mapping layer</strong>, directly analogous to a DTO-to-entity mapper in a typical Java/Spring service, or an ORM's attribute serializer.</li>
+            </ul>
+
+            <h3>3. Sessions as token-keyed hashes</h3>
+            <ul>
+                <li>On successful sign-in/sign-up, generate a random session token, store a small hash keyed by that token (containing just enough info to identify the user — typically a user ID and maybe a username), and return the token to the client.</li>
+                <li>On subsequent requests, the client presents the token; the server looks up <code>sessions#&lt;token&gt;</code> via <code>HGETALL</code>, and — applying the same empty-object gotcha handling from the previous lecture — treats an empty result as "not authenticated" and a populated result as "authenticated as this user."</li>
+                <li>The session hash deliberately <strong>omits the token itself</strong> as a stored field, for the same redundant-with-the-key reason IDs are omitted from other hashes.</li>
+            </ul>
+
+            <h3>4. Pipelining pattern (client-library-agnostic)</h3>
+            <p>Regardless of language/client, the shape of the pattern is:</p>
+            <ol>
+                <li>Build a list of independent commands to run (often via a loop/map over a list of IDs or keys).</li>
+                <li>Queue all of them without individually waiting for each response.</li>
+                <li>Execute the entire batch in one call, receiving back an ordered array of results matching the queued order.</li>
+                <li>Post-process each result exactly as you would for a single-record fetch (handle "not found," deserialize, etc.) — pipelining changes the network shape, not the per-record handling logic.</li>
+            </ol>
+            <p>Note: some client libraries expose an explicit <code>pipeline()</code>/<code>multi()</code>-style object you attach commands to and then <code>execute()</code>; others (as in the transcript's client) achieve the same batching effect implicitly by queuing promises and resolving them together. The <em>concept</em> — one round trip, many commands, ordered results — is the transferable idea regardless of which API shape a given client uses.</p>
+
+            <hr>
+
+            <h2 id="practical-examples">Practical Examples</h2>
+            <ul>
+                <li><strong>Session tokens:</strong> essentially the same mechanism as a JWT-free, server-side session store used by many production web frameworks (Spring Session backed by Redis is a direct enterprise equivalent) — Netflix, LinkedIn, and most large web apps use some variant of "opaque token → server-side session record" for exactly this reason: it lets you invalidate/revoke access server-side instantly (delete the key), unlike a self-contained signed token.</li>
+                <li><strong>Epoch-millis timestamps:</strong> trading systems and auction platforms (eBay, StockX) universally store event timestamps as epoch integers internally for exactly the sortability/comparability reason described here — human-readable formatting is strictly a presentation-layer concern applied at render time.</li>
+                <li><strong>Pipelining for batch fetches:</strong> Discord fetching multiple message/user records for a channel view, or an e-commerce site fetching a cart's several line-item records, are textbook pipelining use cases — many independent keys, one logical page load, one round trip.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="java-implementation">Enterprise Java Implementation</h2>
+
+            <h3>ID generation (Redis has no auto-increment)</h3>
+<pre><code>public String generateId() {
+    return UUID.randomUUID().toString();
+}</code></pre>
+
+            <h3>Serialize / Deserialize pattern</h3>
+<pre><code>public class ItemMapper {
+
+    // Serialize: domain object -&gt; Redis-safe map (drop ID, convert dates to epoch millis)
+    public Map&lt;String, String&gt; serialize(Item item) {
+        Map&lt;String, String&gt; data = new HashMap&lt;&gt;();
+        data.put("name", item.getName());
+        data.put("description", item.getDescription());
+        data.put("price", String.valueOf(item.getPrice()));
+        data.put("createdAt", String.valueOf(item.getCreatedAt().toEpochMilli()));
+        data.put("endingAt", String.valueOf(item.getEndingAt().toEpochMilli()));
+        return data;
+    }
+
+    // Deserialize: raw hash (all strings) -&gt; properly typed domain object, with ID re-attached
+    public Item deserialize(String id, Map&lt;Object, Object&gt; raw) {
+        return Item.builder()
+                .id(id)
+                .name((String) raw.get("name"))
+                .description((String) raw.get("description"))
+                .price(Double.parseDouble((String) raw.get("price")))
+                .createdAt(Instant.ofEpochMilli(Long.parseLong((String) raw.get("createdAt"))))
+                .endingAt(Instant.ofEpochMilli(Long.parseLong((String) raw.get("endingAt"))))
+                .build();
+    }
+}</code></pre>
+
+            <h3>Session hash (write and read)</h3>
+<pre><code>@Service
+public class SessionService {
+
+    private final StringRedisTemplate redisTemplate;
+
+    public SessionService(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
+    public void saveSession(String token, String userId, String username) {
+        Map&lt;String, String&gt; data = Map.of("userId", userId, "username", username);
+        redisTemplate.opsForHash().putAll("sessions#" + token, data);
+    }
+
+    public Optional&lt;Map&lt;Object, Object&gt;&gt; getSession(String token) {
+        Map&lt;Object, Object&gt; result = redisTemplate.opsForHash().entries("sessions#" + token);
+        return result.isEmpty() ? Optional.empty() : Optional.of(result);
+    }
+}</code></pre>
+
+            <h3>Pipelining with Spring Data Redis (Lettuce)</h3>
+<pre><code>public List&lt;Map&lt;Object, Object&gt;&gt; getItems(List&lt;String&gt; itemIds) {
+    List&lt;Object&gt; rawResults = redisTemplate.executePipelined((RedisCallback&lt;Object&gt;) connection -&gt; {
+        for (String id : itemIds) {
+            connection.hashCommands().hGetAll(("items:#" + id).getBytes());
+        }
+        return null; // return value is ignored in pipelined mode; results collected separately
+    });
+
+    // rawResults is ordered identically to itemIds
+    return rawResults.stream()
+            .map(r -&gt; (Map&lt;Object, Object&gt;) r)
+            .collect(Collectors.toList());
+}</code></pre>
+
+            <p><strong>What this does and why:</strong> <code>executePipelined</code> is Spring Data Redis's direct equivalent of the queue-then-execute-as-a-batch pattern — every command issued inside the callback is batched into a single round trip, and the returned list preserves command order, exactly matching the transcript's "results[i] corresponds to ids[i]" behavior.</p>
+
+            <p><strong>Alternative approaches / pitfalls:</strong></p>
+            <ul>
+                <li>Looping over <code>HGETALL</code> calls one at a time instead of pipelining is the most common beginner mistake here — functionally correct, but reintroduces the exact N-round-trip cost pipelining exists to eliminate.</li>
+                <li>Forgetting that pipelining does <strong>not</strong> provide atomicity or transactional isolation across the batched commands (that's what <code>MULTI</code>/<code>WATCH</code> transactions, covered later, are for) — a pipeline is purely a network optimization, not a correctness guarantee.</li>
+                <li>A common serialize/deserialize mistake: forgetting to parse a numeric hash field back from its string form, leading to subtle bugs like string concatenation (<code>"5" + "3" = "53"</code>) instead of numeric addition downstream.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="trade-offs">Architectural Trade-Offs</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Approach</th>
+                        <th>Advantages</th>
+                        <th>Disadvantages</th>
+                        <th>Suitable scenarios</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Sequential per-key fetch loop</td>
+                        <td>Simple to write</td>
+                        <td>O(N) round trips; slow for large N</td>
+                        <td>Very small N, prototyping</td>
+                    </tr>
+                    <tr>
+                        <td>Pipelined batch fetch</td>
+                        <td>O(1) round trips regardless of N</td>
+                        <td>No atomicity guarantee across commands; must still post-process each result individually</td>
+                        <td>Fetching many independent records for one logical operation (list views, batch loads)</td>
+                    </tr>
+                    <tr>
+                        <td>Store dates as formatted strings</td>
+                        <td>Human-readable at a glance</td>
+                        <td>Not sortable/comparable without parsing; timezone-dependent</td>
+                        <td>Rarely a good default in Redis; avoid unless purely for display, cached elsewhere</td>
+                    </tr>
+                    <tr>
+                        <td>Store dates as epoch millis</td>
+                        <td>Directly sortable/comparable as numbers; timezone-agnostic</td>
+                        <td>Not human-readable without conversion</td>
+                        <td>Standard choice for anything you'll query, sort, or range over later</td>
+                    </tr>
+                    <tr>
+                        <td>Client-side session store (e.g., signed JWT)</td>
+                        <td>No server-side lookup needed</td>
+                        <td>Harder to revoke instantly; token can grow large</td>
+                        <td>Stateless, horizontally scaled systems willing to trade instant revocation for lookup-free validation</td>
+                    </tr>
+                    <tr>
+                        <td>Server-side session hash (this lecture's approach)</td>
+                        <td>Instant revocation (just delete the key); small opaque token</td>
+                        <td>Requires a Redis lookup per authenticated request</td>
+                        <td>Systems that want simple, centralized control over active sessions</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <hr>
+
+            <h2 id="complexity">Complexity Analysis</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Operation</th>
+                        <th>Time Complexity</th>
+                        <th>Network Overhead</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Single <code>HSET</code>/<code>HGETALL</code></td>
+                        <td>O(fields)</td>
+                        <td>1 round trip</td>
+                    </tr>
+                    <tr>
+                        <td>N sequential <code>HGETALL</code> calls</td>
+                        <td>O(N × fields)</td>
+                        <td>N round trips</td>
+                    </tr>
+                    <tr>
+                        <td>Pipelined N <code>HGETALL</code> calls</td>
+                        <td>O(N × fields)</td>
+                        <td>1 round trip</td>
+                    </tr>
+                    <tr>
+                        <td>Session lookup by token</td>
+                        <td>O(fields in session hash)</td>
+                        <td>1 round trip</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <hr>
+
+            <h2 id="mistakes">Common Mistakes</h2>
+            
+            <p><strong>Beginner mistakes</strong></p>
+            <ul>
+                <li>Storing dates as default-formatted strings instead of epoch-millis integers.</li>
+                <li>Forgetting to generate an ID before writing a hash, since Redis won't do it for you.</li>
+                <li>Fetching multiple independent records with a naive loop instead of a pipeline.</li>
+            </ul>
+
+            <p><strong>Intermediate mistakes</strong></p>
+            <ul>
+                <li>Re-storing the ID as a hash field when it's already encoded in the key — small but avoidable memory waste at scale.</li>
+                <li>Forgetting to parse numeric/date fields back to their proper types during deserialize, leading to type-confusion bugs downstream (string concatenation instead of numeric addition, incorrect date comparisons).</li>
+                <li>Assuming a pipeline provides atomicity or isolation between the batched commands — it does not.</li>
+            </ul>
+
+            <p><strong>Production mistakes</strong></p>
+            <ul>
+                <li>Using a weak or predictable session-token generation scheme — since the token itself is the entire authentication credential, it must come from a cryptographically secure random source, not a simple counter or timestamp-derived value.</li>
+                <li>Never expiring session hashes, leading to an ever-growing set of stale session keys consuming memory indefinitely (a TTL on session keys is the standard mitigation, reusing the expiration knowledge from earlier in the course).</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="interview-questions">Interview Questions</h2>
+            
+            <p><strong>Basic</strong></p>
+            <ul>
+                <li>Why doesn't Redis generate unique IDs for you the way a SQL database's auto-increment column would?</li>
+                <li>What problem does pipelining solve, and what problem does it <em>not</em> solve?</li>
+            </ul>
+
+            <p><strong>Intermediate</strong></p>
+            <ul>
+                <li>Why store timestamps as Unix epoch milliseconds instead of a formatted date string in Redis?</li>
+                <li>Explain the serialize/deserialize convention and why it's not a Redis feature but an application-level pattern.</li>
+            </ul>
+
+            <p><strong>Advanced</strong></p>
+            <ul>
+                <li>Compare server-side session hashes in Redis to client-side JWTs for authentication. What operational capability does one approach give up in exchange for what benefit?</li>
+                <li>Why does pipelining reduce wall-clock latency without reducing the total amount of work Redis's single-threaded command processor has to do? Walk through where the actual time savings comes from.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="senior-notes">Senior Engineer Notes</h2>
+            <ul>
+                <li>Treat serialize/deserialize as a mandatory pair for every hash-backed entity in a codebase, not an optional nicety — it's the one place that guarantees write-shape and read-shape stay in sync as a schema evolves, and it's far cheaper to enforce this convention from day one than to retrofit it after inconsistent ad hoc formatting has crept into production data.</li>
+                <li>Any time you catch yourself writing a loop of sequential Redis calls to satisfy one logical request (a page load, a batch job), that's a signal to reach for a pipeline — it's one of the highest-leverage, lowest-risk optimizations available in a Redis-backed system.</li>
+                <li>Session tokens are a security-sensitive value — generate them with a cryptographically secure random generator and always pair them with a TTL, never treat them as "just another hash key."</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="connections">Connections to Previous Topics</h2>
+            <ul>
+                <li>The empty-object-on-missing-key handling introduced for <code>HGETALL</code> in the previous lecture reappears here almost verbatim for session lookups — the exact same "check for emptiness, not truthiness" discipline applies.</li>
+                <li>Centralized key-generation functions (from the design-methodology lecture) are used here for every new key shape (<code>sessions#token</code>, entity-specific keys) — the same anti-typo discipline applies across every new feature.</li>
+                <li>Pipelining is the general-purpose extension of the <code>MGET</code>/<code>MSET</code> batching idea you saw with plain strings — same underlying motivation (collapse N round trips into 1), now generalized to arbitrary, mixed command types.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="takeaways">Key Takeaways</h2>
+            <ul>
+                <li>Use a hash when a record has several attributes, is typically fetched whole, and needs multi-attribute sorting/filtering (the latter requiring a future auxiliary structure); avoid it for pure counters/uniqueness checks or time-series data.</li>
+                <li>Redis does not generate IDs — your application must generate them (commonly via UUID) before constructing a key.</li>
+                <li>Serialize/deserialize is an application-level convention, not a Redis feature: serialize drops key-redundant fields (like ID) and converts rich types (dates) to Redis-safe primitives (epoch millis); deserialize reverses both steps and re-attaches the ID.</li>
+                <li>Sessions are just token-keyed hashes: generate a secure random token on login, store minimal identifying info under it, and look it up on each subsequent request — pair with a TTL in production.</li>
+                <li>Pipelining batches many independent commands into a single network round trip, cutting wall-clock latency without changing total server-side work — but it provides no atomicity guarantee across the batch.</li>
+            </ul>
+        </div>
+    </main>
+
+</body>
+</html>
