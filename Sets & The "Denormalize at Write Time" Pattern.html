@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redis: Sets & The "Denormalize at Write Time" Pattern</title>
+    <style>
+        :root {
+            --sidebar-bg: #0f172a;
+            --sidebar-hover: #1e293b;
+            --sidebar-text: #94a3b8;
+            --sidebar-text-hover: #f8fafc;
+            --bg-color: #f1f5f9;
+            --card-bg: #ffffff;
+            --text-main: #334155;
+            --heading-color: #0f172a;
+            --primary-accent: #2563eb;
+            --code-bg: #1e293b;
+            --code-text: #e2e8f0;
+            --inline-code-bg: #e2e8f0;
+            --inline-code-text: #b91c1c;
+            --border-color: #e2e8f0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            line-height: 1.7;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: 280px;
+            height: 100vh;
+            background-color: var(--sidebar-bg);
+            position: fixed;
+            top: 0;
+            left: 0;
+            overflow-y: auto;
+            padding: 2rem 1rem;
+            box-sizing: border-box;
+            border-right: 1px solid #1e293b;
+        }
+
+        .sidebar h2 {
+            color: #ffffff;
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            padding-left: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar li {
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 0.75rem 1rem;
+            color: var(--sidebar-text);
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar a:hover {
+            background-color: var(--sidebar-hover);
+            color: var(--sidebar-text-hover);
+            padding-left: 1.25rem;
+        }
+
+        /* Main Content Area */
+        .content-wrapper {
+            margin-left: 280px;
+            padding: 3rem 5%;
+            width: calc(100% - 280px);
+            box-sizing: border-box;
+        }
+
+        .content {
+            background: var(--card-bg);
+            padding: 3rem 4rem;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        /* Typography */
+        h1, h2, h3, h4 {
+            color: var(--heading-color);
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-top: 0;
+            padding-bottom: 1rem;
+            border-bottom: 3px solid var(--primary-accent);
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-top: 1rem;
+        }
+
+        h3 {
+            font-size: 1.4rem;
+            color: var(--primary-accent);
+        }
+
+        h4 {
+            font-size: 1.1rem;
+            color: var(--heading-color);
+        }
+
+        p {
+            margin-bottom: 1.2rem;
+        }
+
+        strong {
+            color: var(--heading-color);
+        }
+
+        /* Code Blocks */
+        pre {
+            background-color: var(--code-bg);
+            color: var(--code-text);
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        code {
+            background-color: var(--inline-code-bg);
+            color: var(--inline-code-text);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+        }
+
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 2rem 0;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border: 1px solid var(--border-color);
+            vertical-align: top;
+        }
+
+        th {
+            background-color: #f8fafc;
+            color: var(--heading-color);
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        /* Lists */
+        ul, ol {
+            margin-bottom: 1.5rem;
+            padding-left: 2rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        hr {
+            border: 0;
+            border-top: 1px solid var(--border-color);
+            margin: 2rem 0;
+        }
+
+        /* Callouts / Highlight Box */
+        .highlight-box {
+            background-color: #eff6ff;
+            border-left: 4px solid var(--primary-accent);
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 900px) {
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+                padding: 1rem;
+            }
+            .content-wrapper {
+                margin-left: 0;
+                width: 100%;
+                padding: 1rem;
+            }
+            .content {
+                padding: 1.5rem;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Vertical Sidebar -->
+    <nav class="sidebar">
+        <h2>Contents</h2>
+        <ul>
+            <li><a href="#position">Position in the Course</a></li>
+            <li><a href="#overview">High-Level Overview</a></li>
+            <li><a href="#why-exists">Why This Concept Exists</a></li>
+            <li><a href="#internal-working">Internal Working</a></li>
+            <li><a href="#important-concepts">Important Concepts</a></li>
+            <li><a href="#practical-examples">Practical Examples</a></li>
+            <li><a href="#java-implementation">Enterprise Java Implementation</a></li>
+            <li><a href="#trade-offs">Architectural Trade-Offs</a></li>
+            <li><a href="#complexity">Complexity Analysis</a></li>
+            <li><a href="#mistakes">Common Mistakes</a></li>
+            <li><a href="#interview-questions">Interview Questions</a></li>
+            <li><a href="#senior-notes">Senior Engineer Notes</a></li>
+            <li><a href="#connections">Connections to Previous Topics</a></li>
+            <li><a href="#takeaways">Key Takeaways</a></li>
+        </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="content-wrapper">
+        <div class="content">
+
+            <div id="intro">
+                <h1>Sets in Redis: Core Commands, Set Algebra, and the "Denormalize at Write Time" Pattern</h1>
+                <hr>
+            </div>
+
+            <h2 id="position">Position in the Course</h2>
+            <ul>
+                <li><strong>Section:</strong> Sets</li>
+                <li><strong>Lecture number(s):</strong> Corresponds to "Basics of Sets," "Store Variations," "Checking for an Element in a Set," "Scanning a Set," "Most Common Use Cases of Sets," "Requiring Unique User Names," "Adding a Like System," "How to Count the Number of Likes?," "Updating Like Quantities," "Showing Liked Items," "Showing Common Liked Items," "Union of Sets," "Intersection of Sets," "Difference of Sets."</li>
+                <li><strong>Previously covered concepts:</strong> Hashes (<code>HSET</code>/<code>HGET</code>/<code>HGETALL</code>/<code>HINCRBY</code>/<code>HDEL</code>/<code>HEXISTS</code>), the query-first design methodology, key naming conventions, serialize/deserialize as an application-level pattern, sessions, pipelining (<code>Promise.all</code>-style batching / <code>executePipelined</code>), and the <code>getItems</code>-style "fetch many hashes by ID in one pipeline" pattern from the hashes section — reused directly in this lecture block.</li>
+                <li><strong>Concepts intentionally omitted because they appear later:</strong> Sorted sets (needed for anything requiring <em>ordered</em> or <em>ranked</em> collections — sets have no inherent order), transactions/<code>WATCH</code> (needed to properly fix the "duplicate rapid-click" race condition the instructor flags but defers), Lua scripting.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="overview">High-Level Overview</h2>
+            <p>A <strong>set</strong> is an unordered collection of unique strings (or numbers, stored as strings) under one key. No duplicates are ever possible — adding an already-present member is a no-op. Core single-set commands: <code>SADD</code> (add), <code>SMEMBERS</code> (list all), <code>SCARD</code> (count), <code>SREM</code> (remove), <code>SISMEMBER</code>/<code>SMISMEMBER</code> (membership test, single/multiple), <code>SSCAN</code> (paginated iteration for large sets). Multi-set "set algebra" commands: <code>SUNION</code>, <code>SINTER</code>, <code>SDIFF</code> (and their <code>*STORE</code> variants, which persist the result under a new key instead of just returning it).</p>
+
+            <p>The lecture then builds two real features on top of sets: <strong>enforcing unique usernames</strong> (a straightforward membership check) and a <strong>like system</strong> (one set per user of liked item IDs), which surfaces an important, recurring Redis modeling lesson: <strong>Redis cannot efficiently answer "how many of my many sets contain this value" — so you precompute and store that count elsewhere instead of scanning all sets on every read.</strong></p>
+
+            <hr>
+
+            <h2 id="why-exists">Why This Concept Exists</h2>
+            
+            <p><strong>Why sets at all?</strong> A set gives you two things a plain string or hash can't: <strong>automatic deduplication</strong> and <strong>efficient membership testing</strong> (<code>SISMEMBER</code> doesn't need to load the whole collection to answer "is X in here?"). Any time your access pattern is fundamentally "is this value present" or "give me the unique combination of values across a few sources" — rather than "give me an ordered list" or "give me a structured record" — a set is the right tool.</p>
+
+            <p><strong>Why union/intersection/difference exist as first-class commands:</strong> These are the standard set-algebra operations from mathematics, and Redis computes them server-side, in C, across potentially large collections — which is dramatically faster and more network-efficient than pulling every set's full contents back to your application and computing the union/intersection/difference in application code. This is the same "push the computation to the data" principle behind why databases offer aggregate functions instead of making you <code>SELECT *</code> and sum in your app.</p>
+
+            <p><strong>Why <code>*STORE</code> variants exist:</strong> Computing a union/intersection/difference over very large sets isn't free — it's proportional to the total size of the input sets. If you need the same computed result repeatedly and the underlying sets don't change every second, it's wasteful to recompute it on every read. <code>SINTERSTORE</code>/<code>SUNIONSTORE</code>/<code>SDIFFSTORE</code> let you compute once and cache the result as a brand-new set, to be read cheaply many times until you decide to recompute it (e.g., on a schedule, or when the underlying sets change).</p>
+
+            <p><strong>Why <code>SSCAN</code> exists alongside <code>SMEMBERS</code>:</strong> <code>SMEMBERS</code> returns the <em>entire</em> set in one reply. For a set with millions of members, that's a huge single response that could tie up significant memory and bandwidth in one shot. <code>SSCAN</code> trades that convenience for a <strong>cursor-based, incremental</strong> retrieval pattern — you get one page at a time, at the cost of having to loop until the cursor comes back as <code>0</code>.</p>
+
+            <p><strong>Why the like-count problem forces a denormalization pattern:</strong> Redis has no mechanism to run an ad hoc aggregate query across an arbitrary number of independent keys (there's no "count how many of these million sets contain value X" command). If "how many people like this item" were computed by checking every user's like-set at read time, that read would be O(number of users) — completely impractical at scale. The fix is to flip the cost from read-time to write-time: every time a like/unlike actually changes membership, also nudge a precomputed counter (stored as a plain field on the item's hash) up or down by exactly one. Reads then become O(1) — just read the counter — at the cost of a small amount of extra work on every write. This is a specific instance of a very general system-design idea: <strong>when a read-time aggregation is too expensive or impossible, maintain the aggregate incrementally at write time instead.</strong></p>
+
+            <hr>
+
+            <h2 id="internal-working">Internal Working</h2>
+            
+            <ul>
+                <li>Redis sets are implemented internally as either an <code>intset</code> (a compact sorted array, used only when every member is an integer and the set is small) or a full hash table (<code>hashtable</code> encoding) once the set grows past configured thresholds or contains non-integer members. Either way, <code>SADD</code>/<code>SREM</code>/<code>SISMEMBER</code> are <strong>O(1) average case</strong> per member (hash table) or O(log N) (intset, still very fast for small sets).</li>
+                <li><code>SADD</code> is O(M) for M members being added in one call; it returns the <strong>count of members actually added</strong> (i.e., not already present) — not the resulting size of the set.</li>
+                <li><code>SMEMBERS</code> is O(N) where N is the set's total size — it must return everything, hence the motivation for <code>SSCAN</code> on large sets.</li>
+                <li><code>SUNION</code>/<code>SINTER</code>/<code>SDIFF</code> are O(sum of all input set sizes) in the general case — <code>SINTER</code> in particular is implemented by iterating the <em>smallest</em> input set and checking membership in the others, which is why intersection is typically the cheapest of the three algebra operations to compute when set sizes are uneven.</li>
+                <li><code>SDIFF</code>'s result is <strong>order-dependent on its arguments</strong>: it returns members present in the <em>first</em> set but absent from all the others — swapping argument order changes the result. <code>SUNION</code>/<code>SINTER</code> are order-independent (they're mathematically commutative).</li>
+                <li><code>SSCAN</code>'s cursor is <strong>not</strong> a simple offset/page-number — it encodes an internal iteration position tied to the set's hash-table structure. The guarantee is: every element present for the entire duration of a complete scan (cursor <code>0</code> → ... → cursor <code>0</code>) will be returned at least once, even if the set is concurrently modified during the scan — but elements added/removed mid-scan may or may not appear, and duplicates are possible. This is a weaker but still highly useful guarantee compared to a single atomic <code>SMEMBERS</code> snapshot.</li>
+                <li><code>SISMEMBER</code>/<code>SMISMEMBER</code> avoid transferring the whole set over the network just to test membership — critical for large sets, since the cost of a membership check stays O(1)/O(M) (M = number of values checked) regardless of how large the set itself is.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="important-concepts">Important Concepts</h2>
+            
+            <h3>1. The four common use cases for sets</h3>
+            <ul>
+                <li><strong>Uniqueness enforcement</strong> — e.g., a set of all usernames in use; check via <code>SISMEMBER</code> before allowing a new signup.</li>
+                <li><strong>Modeling relationships between records</strong> — e.g., one set per user listing the IDs they've liked; <code>SMEMBERS</code> to list them, <code>SCARD</code> to count them, <code>SISMEMBER</code> to check one.</li>
+                <li><strong>Finding common elements across records</strong> — e.g., <code>SINTER</code> between two users' like-sets to find mutually liked items.</li>
+                <li><strong>Unordered membership lists where order never matters</strong> — e.g., a blocklist of banned email domains, checked purely with <code>SISMEMBER</code>.</li>
+            </ul>
+
+            <h3>2. Set algebra commands and their <code>*STORE</code> counterparts</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Command</th>
+                        <th>Returns</th>
+                        <th>Order-sensitive?</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>SUNION k1 k2 ...</code></td>
+                        <td>All unique elements across every set</td>
+                        <td>No</td>
+                    </tr>
+                    <tr>
+                        <td><code>SINTER k1 k2 ...</code></td>
+                        <td>Elements present in <em>every</em> set</td>
+                        <td>No</td>
+                    </tr>
+                    <tr>
+                        <td><code>SDIFF k1 k2 ...</code></td>
+                        <td>Elements in the first set, absent from all others</td>
+                        <td><strong>Yes</strong> — argument order changes the result</td>
+                    </tr>
+                    <tr>
+                        <td><code>SUNIONSTORE dest k1 k2 ...</code></td>
+                        <td>Same as <code>SUNION</code>, but writes the result to <code>dest</code> instead of returning it inline</td>
+                        <td>No</td>
+                    </tr>
+                    <tr>
+                        <td><code>SINTERSTORE dest k1 k2 ...</code></td>
+                        <td>Same as <code>SINTER</code>, persisted to <code>dest</code></td>
+                        <td>No</td>
+                    </tr>
+                    <tr>
+                        <td><code>SDIFFSTORE dest k1 k2 ...</code></td>
+                        <td>Same as <code>SDIFF</code>, persisted to <code>dest</code></td>
+                        <td>Yes</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p>Use <code>*STORE</code> when the same expensive computation will be read repeatedly without the underlying sets changing every request — compute once, read many times, recompute on a schedule or on invalidation.</p>
+
+            <h3>3. <code>SSCAN</code> vs. <code>SMEMBERS</code></h3>
+            <p><code>SMEMBERS</code> is simplest but returns the entire set in one response — fine for small/medium sets, risky for very large ones (memory spike, large single payload, and it can briefly compete with Redis's single command-processing thread on very large sets). <code>SSCAN key cursor [COUNT n]</code> walks the set incrementally: start with cursor <code>0</code>, keep calling with the returned cursor until it comes back as <code>0</code> again, accumulating results page by page.</p>
+
+            <h3>4. <code>SISMEMBER</code> vs. <code>SMISMEMBER</code></h3>
+            <p><code>SISMEMBER key value</code> checks one value, returning <code>1</code>/<code>0</code>. <code>SMISMEMBER key value1 value2 ...</code> checks several values in a single round trip, returning an array of <code>1</code>/<code>0</code> results in the same order as the inputs provided — the set-oriented counterpart to <code>MGET</code> for batching multiple checks into one call.</p>
+
+            <h3>5. The denormalized-counter pattern (the most important idea in this block)</h3>
+            <p>Because Redis has no way to efficiently aggregate across an unbounded number of independent sets, <strong>any time you need a count or aggregate derived from many keys, compute it incrementally at write time and store it as a plain field, not at read time by scanning everything.</strong> In the like-system example: adding a user's item ID to their like-set (<code>SADD</code>) is paired with an <code>HINCRBY</code> on that item's hash to bump its <code>likes</code> field, <em>only when <code>SADD</code> reports the value was actually newly inserted</em> (return value <code>1</code>, not <code>0</code>) — this guards against double-incrementing on an accidental duplicate request (e.g., a rapid double-click), since <code>SADD</code> is naturally idempotent for values already present.</p>
+
+            <hr>
+
+            <h2 id="practical-examples">Practical Examples</h2>
+            <ul>
+                <li><strong>Uniqueness enforcement:</strong> Discord/GitHub-style username or handle uniqueness checks are commonly backed by exactly this pattern — a set of taken usernames, checked with <code>SISMEMBER</code> before allowing signup.</li>
+                <li><strong>Relationship modeling via per-user sets:</strong> Twitter/X's "who do I follow" and "who follows me" relationships have historically been modeled with per-user sets in Redis-backed systems for fast membership and count operations.</li>
+                <li><strong>Intersection for mutual connections:</strong> LinkedIn's "mutual connections" feature and Facebook's "mutual friends" feature are textbook <code>SINTER</code> use cases — intersect two users' connection sets.</li>
+                <li><strong>Denormalized like/view counters:</strong> Reddit-style upvote counts and Instagram-style like counts are universally precomputed and stored as a plain counter field rather than derived by scanning membership sets at read time — for exactly the O(1)-read-vs-O(N)-read reason discussed above.</li>
+                <li><strong>Banned/blocklists:</strong> Stripe and other payment platforms maintain blocklists (banned card BINs, banned email domains, banned IP ranges) as sets checked via <code>SISMEMBER</code>/<code>SMISMEMBER</code> during fraud-prevention checks.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="java-implementation">Enterprise Java Implementation</h2>
+
+            <h3>Unique username enforcement</h3>
+<pre><code>@Service
+public class UsernameUniquenessService {
+
+    private static final String USERNAMES_SET_KEY = "usernames#unique";
+
+    private final StringRedisTemplate redisTemplate;
+
+    public UsernameUniquenessService(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
+    public boolean isUsernameTaken(String username) {
+        return Boolean.TRUE.equals(
+                redisTemplate.opsForSet().isMember(USERNAMES_SET_KEY, username));
+    }
+
+    public void reserveUsername(String username) {
+        redisTemplate.opsForSet().add(USERNAMES_SET_KEY, username);
+    }
+}</code></pre>
+
+            <h3>Like system with denormalized counter</h3>
+<pre><code>@Service
+public class LikeService {
+
+    private final StringRedisTemplate redisTemplate;
+
+    public LikeService(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
+    private String userLikesKey(String userId) {
+        return "users:likes#" + userId;
+    }
+
+    private String itemKey(String itemId) {
+        return "items:#" + itemId;
+    }
+
+    public void likeItem(String userId, String itemId) {
+        Long added = redisTemplate.opsForSet().add(userLikesKey(userId), itemId);
+        if (added != null && added &gt; 0) {
+            // Only bump the counter if this was a genuinely new like —
+            // guards against double-increment on a duplicate/rapid-fire request.
+            redisTemplate.opsForHash().increment(itemKey(itemId), "likes", 1);
+        }
+    }
+
+    public void unlikeItem(String userId, String itemId) {
+        Long removed = redisTemplate.opsForSet().remove(userLikesKey(userId), itemId);
+        if (removed != null && removed &gt; 0) {
+            redisTemplate.opsForHash().increment(itemKey(itemId), "likes", -1);
+        }
+    }
+
+    public boolean userLikesItem(String userId, String itemId) {
+        return Boolean.TRUE.equals(
+                redisTemplate.opsForSet().isMember(userLikesKey(userId), itemId));
+    }
+
+    public Set&lt;String&gt; likedItemIds(String userId) {
+        return redisTemplate.opsForSet().members(userLikesKey(userId));
+    }
+
+    public Set&lt;String&gt; mutuallyLikedItemIds(String userIdA, String userIdB) {
+        return redisTemplate.opsForSet()
+                .intersect(userLikesKey(userIdA), userLikesKey(userIdB));
+    }
+}</code></pre>
+
+            <p><strong>What this does and why:</strong></p>
+            <ul>
+                <li><code>opsForSet().add(...)</code> returns the count of <em>newly</em> added members (mirrors <code>SADD</code>'s return value) — checking <code>added &gt; 0</code> is the direct Java equivalent of the transcript's <code>if (inserted)</code> guard against double-incrementing.</li>
+                <li><code>opsForSet().intersect(...)</code> maps directly to <code>SINTER</code>, and composes naturally with a follow-up batch fetch (pipelined <code>HGETALL</code>s) exactly like the course's <code>getItems</code> reuse pattern — fetch the intersecting IDs first, then pipeline-fetch the full item records for only those IDs.</li>
+                <li>Reusing a single "fetch many item hashes by ID, pipelined" method for <em>both</em> "user's own liked items" and "mutually liked items" (feeding it the output of <code>SMEMBERS</code> in one case and <code>SINTER</code> in the other) avoids duplicating the pipelining/deserialization logic — the set operation only needs to produce the <em>list of IDs</em>; the batch-hash-fetch logic is identical either way.</li>
+            </ul>
+
+            <p><strong>Alternative approaches / pitfalls:</strong></p>
+            <ul>
+                <li>A common mistake is to compute "how many people like this item" by calling <code>SCARD</code> on some imagined single global set of "likers of item X" — that's actually a perfectly valid <em>alternative</em> model (one set per item, containing user IDs, instead of one set per user containing item IDs) and would make <code>SCARD</code> cheap. The course's chosen model (one set per user) is simpler for the "what do I like" and "what do we both like" queries, but means item-level counts must be denormalized as shown, rather than derived from <code>SCARD</code> directly. This is a good illustration of the query-first methodology: the <em>same</em> like relationship can be modeled in more than one way, and the right choice depends on which queries you need to answer cheaply.</li>
+                <li>Failing to check the <code>SADD</code>/<code>SREM</code> return value before adjusting a denormalized counter is a real production bug source — it silently allows double-counting under retried or duplicate requests (e.g., a client retry after a timeout, or an impatient double-click), and the fix (checking <code>&gt; 0</code>/<code>added</code>) costs nothing extra since the return value is already available.</li>
+                <li>Note (flagged in the lecture, not yet solved): even with the <code>SADD</code>-return-value guard, there remains a subtler concurrency race if two truly independent requests for the same like arrive in overlapping windows — a full fix requires transactions/optimistic locking, covered later in the course.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="trade-offs">Architectural Trade-Offs</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Approach</th>
+                        <th>Advantages</th>
+                        <th>Disadvantages</th>
+                        <th>Suitable scenarios</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>One set per user (items they like)</td>
+                        <td>Simple "what do I like" and "what do we both like" queries</td>
+                        <td>Item-level "how many likes" needs denormalization</td>
+                        <td>User-centric like/follow queries</td>
+                    </tr>
+                    <tr>
+                        <td>One set per item (users who like it)</td>
+                        <td><code>SCARD</code> gives item-level like count directly</td>
+                        <td>"What does this user like" now requires scanning many item-sets</td>
+                        <td>Item-centric popularity queries</td>
+                    </tr>
+                    <tr>
+                        <td><code>SMEMBERS</code> for full retrieval</td>
+                        <td>Simple, one call</td>
+                        <td>Can return a huge payload for very large sets</td>
+                        <td>Small-to-medium sets</td>
+                    </tr>
+                    <tr>
+                        <td><code>SSCAN</code> for incremental retrieval</td>
+                        <td>Bounded response size per call; safe for huge sets</td>
+                        <td>More application code; weaker consistency guarantee during concurrent mutation</td>
+                        <td>Very large sets, background/batch processing</td>
+                    </tr>
+                    <tr>
+                        <td>Compute intersection/union live (<code>SINTER</code>/<code>SUNION</code>)</td>
+                        <td>Always fresh</td>
+                        <td>Cost proportional to input set sizes on every read</td>
+                        <td>Small/medium sets, or infrequent reads</td>
+                    </tr>
+                    <tr>
+                        <td>Precompute via <code>*STORE</code> variant</td>
+                        <td>Fast repeated reads</td>
+                        <td>Result can go stale until recomputed</td>
+                        <td>Expensive computations reused often, tolerant of some staleness</td>
+                    </tr>
+                    <tr>
+                        <td>Read-time aggregation across many keys</td>
+                        <td>Conceptually simple</td>
+                        <td>Not actually supported efficiently by Redis for large key counts</td>
+                        <td>Avoid — not a real option at scale</td>
+                    </tr>
+                    <tr>
+                        <td>Write-time denormalized counter</td>
+                        <td>O(1) reads regardless of scale</td>
+                        <td>Slightly more write-side work; must guard against double-counting</td>
+                        <td>Any "count across many independent records" need — the standard Redis answer</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <hr>
+
+            <h2 id="complexity">Complexity Analysis</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Command</th>
+                        <th>Time Complexity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>SADD</code> / <code>SREM</code></td>
+                        <td>O(M) for M members supplied</td>
+                    </tr>
+                    <tr>
+                        <td><code>SISMEMBER</code></td>
+                        <td>O(1)</td>
+                    </tr>
+                    <tr>
+                        <td><code>SMISMEMBER</code></td>
+                        <td>O(M) for M values checked</td>
+                    </tr>
+                    <tr>
+                        <td><code>SCARD</code></td>
+                        <td>O(1) (cardinality is tracked, not recomputed)</td>
+                    </tr>
+                    <tr>
+                        <td><code>SMEMBERS</code></td>
+                        <td>O(N), N = set size</td>
+                    </tr>
+                    <tr>
+                        <td><code>SSCAN</code></td>
+                        <td>O(1) amortized per call (returns a bounded page); O(N) total across a full scan</td>
+                    </tr>
+                    <tr>
+                        <td><code>SUNION</code> / <code>SDIFF</code></td>
+                        <td>O(sum of all input set sizes)</td>
+                    </tr>
+                    <tr>
+                        <td><code>SINTER</code></td>
+                        <td>O(size of smallest input set × number of sets) — cheapest when set sizes are uneven</td>
+                    </tr>
+                    <tr>
+                        <td><code>*STORE</code> variants</td>
+                        <td>Same as base operation, plus O(result size) to write the new key</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <hr>
+
+            <h2 id="mistakes">Common Mistakes</h2>
+            
+            <p><strong>Beginner mistakes</strong></p>
+            <ul>
+                <li>Using <code>SMEMBERS</code> unconditionally on sets that could grow very large, instead of reaching for <code>SSCAN</code>.</li>
+                <li>Forgetting that <code>SDIFF</code>'s result depends on argument order, unlike <code>SUNION</code>/<code>SINTER</code>.</li>
+                <li>Trying to compute an aggregate (like a global like-count) by iterating every user's set at read time.</li>
+            </ul>
+
+            <p><strong>Intermediate mistakes</strong></p>
+            <ul>
+                <li>Not checking <code>SADD</code>'s/<code>SREM</code>'s return value before adjusting a denormalized counter, allowing double-counting on duplicate/retried requests.</li>
+                <li>Choosing "one set per item" vs. "one set per user" without first checking which queries the query-first methodology actually requires — picking the wrong orientation makes one of your two most common queries expensive.</li>
+                <li>Recomputing an expensive <code>SINTER</code>/<code>SUNION</code> on every single read when a <code>*STORE</code>-and-cache approach would be far cheaper for a slowly-changing input.</li>
+            </ul>
+
+            <p><strong>Production mistakes</strong></p>
+            <ul>
+                <li>Running <code>SMEMBERS</code> on a set that has grown far larger than anticipated in production, causing a large single-response payload and memory/latency spikes — this is the aggregate-collection analog of the <code>KEYS</code>-vs-<code>SCAN</code> mistake seen earlier in the course.</li>
+                <li>Building a like/relationship system without any plan for the read/write race between a duplicate rapid click and the denormalized counter update — acceptable to defer with a comment (as the instructor does), but should be tracked and revisited once transactions are available, not forgotten.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="interview-questions">Interview Questions</h2>
+            
+            <p><strong>Basic</strong></p>
+            <ul>
+                <li>What guarantee does a Redis set make that a list or hash doesn't?</li>
+                <li>What's the difference between <code>SMEMBERS</code> and <code>SSCAN</code>, and when would you prefer one over the other?</li>
+            </ul>
+
+            <p><strong>Intermediate</strong></p>
+            <ul>
+                <li>Why is <code>SDIFF</code>'s result order-dependent while <code>SUNION</code>'s and <code>SINTER</code>'s are not?</li>
+                <li>Design a like-count feature and explain why deriving the count from set cardinality directly is not viable at scale in the model where each user has their own like-set.</li>
+            </ul>
+
+            <p><strong>Advanced</strong></p>
+            <ul>
+                <li>Compare "one set per user" vs. "one set per item" for modeling a many-to-many like relationship. What queries does each make cheap, and what does each make expensive?</li>
+                <li>Explain the general principle of "denormalize at write time when read-time aggregation is too expensive," and give two more examples of it beyond the like-count case.</li>
+                <li>Walk through the residual race condition in a naive <code>SADD</code>-then-<code>HINCRBY</code> like implementation, even with a return-value guard, and describe at a high level what mechanism would be needed to close it completely.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="senior-notes">Senior Engineer Notes</h2>
+            <ul>
+                <li>The choice of "which side owns the set" (user-owns-items-liked vs. item-owns-users-who-like) is a genuine architectural decision, not a coin flip — always trace it back to which queries you actually need to answer cheaply, exactly as the query-first methodology demands. Revisiting this decision after the data is already in production means a migration, not a code change.</li>
+                <li>Treat "check the mutation command's return value before adjusting a denormalized counter" as a non-negotiable code-review checklist item any time you see an <code>SADD</code>/<code>SREM</code>/similar paired with a counter update — it's cheap to get right and easy to silently get wrong.</li>
+                <li><code>*STORE</code> variants are worth reaching for the moment a set-algebra computation shows up in a hot read path against inputs that don't change on every request — treat "compute once, cache under a new key, refresh on a schedule or explicit invalidation" as a standard tool, not a special-case optimization.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="connections">Connections to Previous Topics</h2>
+            <ul>
+                <li>The like system reuses the <code>getItems</code> pipelined-batch-fetch function built in the hashes section verbatim — sets here are only responsible for producing a <em>list of IDs</em>; the actual record retrieval, empty-object handling, and deserialization logic is unchanged and shared across both "my liked items" (<code>SMEMBERS</code>) and "mutually liked items" (<code>SINTER</code>) queries. This is a strong illustration of designing small, composable data-access functions.</li>
+                <li><code>HINCRBY</code>, used here to maintain the denormalized like counter, is the same command introduced in the hashes section — this lecture shows its first "real" production use case beyond a standalone demo.</li>
+                <li>The unique-username set reuses the same centralized key-generation-function discipline (<code>usernamesUniqueKey</code>) established in the design-methodology lecture.</li>
+                <li>The instructor explicitly flags a concurrency race here (duplicate rapid-fire like requests) as a preview of the transactions/<code>WATCH</code> material still to come — the same class of race first raised back when comparing <code>GET</code>+<code>SET</code> to <code>INCR</code> for the upvote-counter example.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="takeaways">Key Takeaways</h2>
+            <ul>
+                <li>A Redis set is an unordered, duplicate-free collection of strings; core operations (<code>SADD</code>, <code>SREM</code>, <code>SISMEMBER</code>, <code>SCARD</code>) are O(1)/O(M) and don't require loading the whole set.</li>
+                <li><code>SUNION</code>/<code>SINTER</code>/<code>SDIFF</code> compute set algebra server-side; only <code>SDIFF</code>'s result depends on argument order. <code>*STORE</code> variants persist the result for cheap repeated reads.</li>
+                <li>Prefer <code>SSCAN</code> over <code>SMEMBERS</code> for very large sets to avoid one enormous single response.</li>
+                <li>Redis cannot efficiently aggregate across an unbounded number of independent sets — any "count across many records" need should be solved by <strong>maintaining a denormalized counter at write time</strong> (e.g., <code>HINCRBY</code> on a paired hash), not by scanning at read time.</li>
+                <li>Always gate a denormalized-counter update on the underlying <code>SADD</code>/<code>SREM</code> actually having changed set membership (checking the returned count), to avoid double-counting duplicate or retried requests.</li>
+                <li>Modeling a many-to-many relationship as "one set per user" vs. "one set per item" is a real design trade-off — choose based on which queries the query-first methodology says you actually need cheap.</li>
+            </ul>
+        </div>
+    </main>
+
+</body>
+</html>
