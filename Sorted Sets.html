@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redis: Sorted Sets</title>
+    <style>
+        :root {
+            --sidebar-bg: #0f172a;
+            --sidebar-hover: #1e293b;
+            --sidebar-text: #94a3b8;
+            --sidebar-text-hover: #f8fafc;
+            --bg-color: #f1f5f9;
+            --card-bg: #ffffff;
+            --text-main: #334155;
+            --heading-color: #0f172a;
+            --primary-accent: #2563eb;
+            --code-bg: #1e293b;
+            --code-text: #e2e8f0;
+            --inline-code-bg: #e2e8f0;
+            --inline-code-text: #b91c1c;
+            --border-color: #e2e8f0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            line-height: 1.7;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: 280px;
+            height: 100vh;
+            background-color: var(--sidebar-bg);
+            position: fixed;
+            top: 0;
+            left: 0;
+            overflow-y: auto;
+            padding: 2rem 1rem;
+            box-sizing: border-box;
+            border-right: 1px solid #1e293b;
+        }
+
+        .sidebar h2 {
+            color: #ffffff;
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            padding-left: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar li {
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 0.75rem 1rem;
+            color: var(--sidebar-text);
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar a:hover {
+            background-color: var(--sidebar-hover);
+            color: var(--sidebar-text-hover);
+            padding-left: 1.25rem;
+        }
+
+        /* Main Content Area */
+        .content-wrapper {
+            margin-left: 280px;
+            padding: 3rem 5%;
+            width: calc(100% - 280px);
+            box-sizing: border-box;
+        }
+
+        .content {
+            background: var(--card-bg);
+            padding: 3rem 4rem;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        /* Typography */
+        h1, h2, h3, h4 {
+            color: var(--heading-color);
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-top: 0;
+            padding-bottom: 1rem;
+            border-bottom: 3px solid var(--primary-accent);
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-top: 1rem;
+        }
+
+        h3 {
+            font-size: 1.4rem;
+            color: var(--primary-accent);
+        }
+
+        h4 {
+            font-size: 1.1rem;
+            color: var(--heading-color);
+        }
+
+        p {
+            margin-bottom: 1.2rem;
+        }
+
+        strong {
+            color: var(--heading-color);
+        }
+
+        /* Code Blocks */
+        pre {
+            background-color: var(--code-bg);
+            color: var(--code-text);
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        code {
+            background-color: var(--inline-code-bg);
+            color: var(--inline-code-text);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+        }
+
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 2rem 0;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border: 1px solid var(--border-color);
+            vertical-align: top;
+        }
+
+        th {
+            background-color: #f8fafc;
+            color: var(--heading-color);
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        /* Lists */
+        ul, ol {
+            margin-bottom: 1.5rem;
+            padding-left: 2rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        hr {
+            border: 0;
+            border-top: 1px solid var(--border-color);
+            margin: 2rem 0;
+        }
+
+        /* Callouts / Highlight Box */
+        .highlight-box {
+            background-color: #eff6ff;
+            border-left: 4px solid var(--primary-accent);
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 900px) {
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+                padding: 1rem;
+            }
+            .content-wrapper {
+                margin-left: 0;
+                width: 100%;
+                padding: 1rem;
+            }
+            .content {
+                padding: 1.5rem;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Vertical Sidebar -->
+    <nav class="sidebar">
+        <h2>Contents</h2>
+        <ul>
+            <li><a href="#position">Position in the Course</a></li>
+            <li><a href="#overview">High-Level Overview</a></li>
+            <li><a href="#why-exists">Why This Concept Exists</a></li>
+            <li><a href="#internal-working">Internal Working</a></li>
+            <li><a href="#important-concepts">Important Concepts</a></li>
+            <li><a href="#practical-examples">Practical Examples</a></li>
+            <li><a href="#java-implementation">Enterprise Java Implementation</a></li>
+            <li><a href="#trade-offs">Architectural Trade-Offs</a></li>
+            <li><a href="#complexity">Complexity Analysis</a></li>
+            <li><a href="#mistakes">Common Mistakes</a></li>
+            <li><a href="#interview-questions">Interview Questions</a></li>
+            <li><a href="#senior-notes">Senior Engineer Notes</a></li>
+            <li><a href="#connections">Connections to Previous Topics</a></li>
+            <li><a href="#takeaways">Key Takeaways</a></li>
+        </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="content-wrapper">
+        <div class="content">
+
+            <div id="intro">
+                <h1>Sorted Sets: Core Commands, Range Queries, and Leaderboard-Style Application Patterns</h1>
+                <hr>
+            </div>
+
+            <h2 id="position">Position in the Course</h2>
+            <ul>
+                <li><strong>Section:</strong> Sorted Sets</li>
+                <li><strong>Lecture number(s):</strong> Corresponds to "Sorted Sets," "Adding and Removing Members," "Finding a Range of Scores," "Removing the Highest and Lowest Members," "Updating Scores," "Querying a Sorted Set," "Sorted Set Use Cases," "Reminder on the Auth Flow," "Storing Usernames," "Kind of Storing Strings in Sorted Sets," "Converting User IDs," "Plan for Showing Most Viewed Items," "Initializing Views on Item Creation," "Incrementing View Counters," "Items by Ending Soonest," "Querying for Ending Soonest."</li>
+                <li><strong>Previously covered concepts:</strong> Hashes, sets (including the denormalized-counter pattern and the "Redis can't aggregate across many independent keys" limitation), pipelining, serialize/deserialize, key-naming conventions, sessions, Unix-epoch-millis as the standard way to store timestamps.</li>
+                <li><strong>Concepts intentionally omitted because they appear later:</strong> <code>BYLEX</code> range queries (explicitly skipped by the instructor as low-value for this course), deprecated legacy range commands (<code>ZREVRANGE</code>, <code>ZREVRANGEBYLEX</code>, etc. — noted as deprecated, not covered), transactions/<code>WATCH</code>, Lua scripting, and the "count each user's view exactly once" uniqueness requirement (flagged here as a known gap to be solved in a later lecture using an additional data structure).</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="overview">High-Level Overview</h2>
+            <p>A <strong>sorted set</strong> (<code>ZSET</code>) is a hybrid of a set and a hash: like a set, every <strong>member</strong> is a unique string. Like a hash, every member has an associated value — but here that value (called the <strong>score</strong>) is <em>always</em> a number (integer or float, positive or negative), and — critically — <strong>members are automatically kept ordered by score</strong> at all times, from lowest to highest.</p>
+
+            <p>This ordering-by-score property is what makes sorted sets fundamentally more powerful than plain sets for a huge class of problems: <strong>anything that needs "top N," "bottom N," "items in this range," or "items in a relationship, sorted by some criterion."</strong></p>
+
+            <p>Core commands: <code>ZADD</code> (add/update a member-score pair), <code>ZSCORE</code> (look up a member's score), <code>ZREM</code> (remove a member), <code>ZINCRBY</code> (adjust a score atomically), <code>ZPOPMIN</code>/<code>ZPOPMAX</code> (remove-and-return the lowest/highest N members), <code>ZCARD</code> (total member count), <code>ZCOUNT</code> (count members within a score range), and <code>ZRANGE</code> (the main retrieval command, with several important modifier flags: <code>BYSCORE</code>, <code>REV</code>, <code>LIMIT</code>, <code>WITHSCORES</code>).</p>
+
+            <p>Two major application patterns follow directly from this: (1) maintaining a <strong>leaderboard-style sorted set alongside a collection of hashes</strong> to answer "top N by attribute X" cheaply, and (2) using a sorted set to model <strong>an ordered relationship</strong>, exactly like the sets lecture modeled <em>unordered</em> relationships.</p>
+
+            <hr>
+
+            <h2 id="why-exists">Why This Concept Exists</h2>
+            
+            <p><strong>Why not just use a set with a separate "sort key"?</strong> Plain sets have no notion of order or score at all — <code>SMEMBERS</code> returns members in whatever internal order the encoding happens to produce, with no guarantee and no way to rank them. If your access pattern is ever "give me the top 10," "give me everything between X and Y," or "give me the next item to expire," a plain set structurally cannot answer that without pulling the entire set into your application and sorting it there — throwing away exactly the kind of server-side, engineered-for-speed computation Redis exists to provide.</p>
+
+            <p><strong>Why scores must be numeric:</strong> Ordering only has an unambiguous, efficient definition over a totally ordered numeric domain. This is precisely why the course runs into the hexadecimal-ID-as-score problem later in this lecture block — the moment you have a value that's a number in spirit (a generated hex ID) but a string in representation, you must explicitly convert it to a genuine base-10 number before Redis can use it as a score, because Redis has no way to compare "strings that happen to represent numbers" the way you'd want for ranking.</p>
+
+            <p><strong>Why <code>ZRANGE</code> supports both index-based and score-based (<code>BYSCORE</code>) modes, plus <code>REV</code> and <code>LIMIT</code>:</strong> These four capabilities compose to answer the overwhelming majority of "give me a slice of a ranked collection" questions that show up in real applications: top-N (<code>REV</code> + <code>LIMIT</code>), bottom-N (default order + <code>LIMIT</code>), pagination through a ranked list (<code>LIMIT</code> with an offset), and "everything from now until forever" style queries (<code>BYSCORE</code> with <code>+inf</code>) — which is exactly the shape needed for "what's ending soonest from right now onward."</p>
+
+            <p><strong>Why duplicate data across a hash and a sorted set is the accepted norm here:</strong> Exactly as with the like-count denormalization from the sets lecture, Redis rewards read-optimized duplication over write-time normalization. An item's <code>views</code> count lives both as a hash field (for "show me everything about item X in one lookup") and as a score in a <code>items:views</code> sorted set (for "show me the top-viewed items across the whole catalog"). Two different query shapes, so two different structures — each optimized for its own access pattern, kept in sync explicitly at write time (ideally within a single pipeline).</p>
+
+            <hr>
+
+            <h2 id="internal-working">Internal Working</h2>
+            
+            <ul>
+                <li>Internally, a sorted set is backed by both a hash table (for O(1) member → score lookup, used by <code>ZSCORE</code>) and a skip list (an ordered, multi-level linked structure that supports efficient range queries and rank lookups) — small sorted sets use a more compact <code>listpack</code> encoding, converting to the full skip-list+hash-table representation once size thresholds are exceeded.</li>
+                <li><strong><code>ZADD key score member</code></strong> — note the <strong>argument order is score-then-member</strong>, the reverse of what many people intuitively expect. Time complexity O(log N) per element added (skip-list insertion).</li>
+                <li><strong><code>ZSCORE key member</code></strong> — O(1) lookup via the internal hash table; returns the score as a string (same "everything is a string over the wire" behavior seen elsewhere), so the client must parse it back to a number.</li>
+                <li><strong><code>ZREM key member</code></strong> — O(log N), removes from both the hash table and skip list.</li>
+                <li><strong><code>ZINCRBY key increment member</code></strong> — O(log N); atomically reads the current score, adds <code>increment</code> (which may be negative), writes the new score, and re-threads the member's position in the skip list — same single-command-atomicity rationale as <code>INCR</code>/<code>HINCRBY</code>.</li>
+                <li><strong><code>ZPOPMIN</code>/<code>ZPOPMAX key [count]</code></strong> — O(log N × count); removes and returns the lowest/highest <code>count</code> member-score pairs in one atomic step (defaults to 1 if <code>count</code> omitted).</li>
+                <li><strong><code>ZCARD key</code></strong> — O(1) (cardinality is tracked directly, not recomputed).</li>
+                <li><strong><code>ZCOUNT key min max</code></strong> — O(log N + M) where M is the number of elements in the counted range — efficient because the skip list lets Redis jump directly to the range boundary rather than scanning from the start.</li>
+                <li><strong><code>ZRANGE</code></strong> — the most feature-rich command in this set:
+                    <ul>
+                        <li><strong>Index mode</strong> (default): <code>ZRANGE key start stop</code> treats <code>start</code>/<code>stop</code> as <strong>0-based ranks</strong> into the score-ordered sequence (inclusive on both ends).</li>
+                        <li><strong><code>BYSCORE</code> mode</strong>: <code>ZRANGE key min max BYSCORE</code> reinterprets <code>start</code>/<code>stop</code> as a <strong>score range</strong> instead of ranks — inclusive by default on both bounds.</li>
+                        <li><strong>Open-interval syntax</strong>: prefixing a bound with <code>(</code> excludes it (e.g., <code>(55</code> means "less than 55, not up to and including").</li>
+                        <li><strong>Infinite bounds</strong>: <code>+inf</code>/<code>-inf</code> express an open-ended range in either direction.</li>
+                        <li><strong><code>REV</code></strong>: reverses the order sorted sets are traversed for the purposes of rank-based indexing (or ordering of results) — effectively flips "ascending by score" to "descending by score" before applying <code>start</code>/<code>stop</code>.</li>
+                        <li><strong><code>LIMIT offset count</code></strong>: valid <strong>only</strong> in combination with <code>BYSCORE</code>; skips <code>offset</code> elements from the already-filtered/ordered result and returns the next <code>count</code> — this is your pagination primitive.</li>
+                        <li><strong><code>WITHSCORES</code></strong>: includes each member's score alongside it in the returned array.</li>
+                        <li>Complexity: O(log N + M) where M is the number of elements returned — efficient regardless of total sorted-set size, because of the skip-list structure.</li>
+                    </ul>
+                </li>
+            </ul>
+
+            <hr>
+
+            <h2 id="important-concepts">Important Concepts</h2>
+            
+            <h3>1. Two headline use cases for sorted sets</h3>
+            <ul>
+                <li><strong>"Top/bottom N of some attribute across many hashes"</strong> (a leaderboard): maintain a sorted set alongside a collection of hashes, where each member is a hash's key/ID and the score is whatever attribute you want to rank by (review count, rating, purchase count, view count). Answering "which record has the most X" becomes a cheap <code>ZRANGE ... REV LIMIT 0 1</code> followed by a hash lookup for the winning ID(s) — a two-step but each step O(log N)-cheap process, versus scanning every hash to compute a maximum.</li>
+                <li><strong>"Ordered relationships between records"</strong>: exactly like the sets lecture's "one set per user" relationship pattern, but now with a meaningful score attached — e.g., "which books has this author worked on, ordered by copies sold" or "ordered by publication date." Any time a many-to-many (or one-to-many) relationship needs an inherent ordering, a sorted set generalizes the plain-set relationship pattern by adding that ordering dimension essentially for free.</li>
+            </ul>
+
+            <h3>2. The hexadecimal-ID-as-score conversion trick</h3>
+            <p>Generated unique IDs in this course are hex-encoded strings (e.g., from a random-ID generator). Redis sorted-set scores must be genuine numbers. Feeding a hex string directly into <code>ZADD</code> as a score fails (or is rejected by the type system in a strongly-typed client) because it's still fundamentally a string, not a number, from Redis's point of view. The fix: explicitly convert the hex string to its base-10 integer equivalent (e.g., <code>parseInt(hexId, 16)</code> in JavaScript, <code>Long.parseLong(hexId, 16)</code> in Java) before writing it as a score, and convert back from base-10 to hex when reading the score back out to reconstruct the original ID format. This is a specific instance of a general rule: <strong>anything you intend to use as a sorted-set score must be an actual numeric value in the language you're using — verify the type, don't assume a numeric-looking string will "just work."</strong></p>
+
+            <h3>3. Using a sorted set as a substitute for a hash or set (flexibility, not necessity)</h3>
+            <p>The lecture deliberately demonstrates implementing "look up a user's ID by username" using a sorted set (username as member, ID as score) even though a plain hash (username → ID) would work equally well and avoid the hex-conversion headache entirely. The pedagogical point: sorted sets are flexible enough to substitute for other structures in a pinch, but that flexibility doesn't mean it's always the <em>simplest</em> choice — prefer the structure that most directly matches the shape of your data and avoids unnecessary type-conversion friction, unless there's a specific reason (as here, mainly for teaching purposes) to do otherwise.</p>
+
+            <h3>4. Duplicating an attribute between a hash field and a sorted-set score</h3>
+            <p>Any time an item's hash already stores an attribute (e.g., <code>views</code>), and you also need to rank items by that attribute across the whole collection, the standard move is: <strong>update both structures together, ideally in the same pipeline</strong>, whenever that attribute changes. This is the same "denormalize for the read pattern you need" principle from the sets/likes lecture, now applied to numeric ranking attributes instead of boolean-ish counts.</p>
+
+            <h3>5. <code>ZRANGE ... BYSCORE ... LIMIT</code> as the general "everything from now onward, first page" pattern</h3>
+            <p>The "ending soonest" feature is solved with: <code>ZRANGE items:endingAt &lt;currentTimeMillis&gt; +inf BYSCORE LIMIT 0 &lt;pageSize&gt;</code> — read as "starting from the current moment, walking forward toward the far future, give me only the first page-size worth of results." This exact shape (current-time-or-threshold as the lower bound, <code>+inf</code> as the upper bound, <code>LIMIT</code> for pagination) is broadly reusable any time "what's coming up next / soonest / newest from this point forward" is the question.</p>
+
+            <hr>
+
+            <h2 id="practical-examples">Practical Examples</h2>
+            <ul>
+                <li><strong>Leaderboards</strong> (the canonical sorted-set use case): gaming leaderboards (top scores), Stack Overflow's top-answered/top-voted questions, and e-commerce "best sellers" rankings are all textbook <code>ZINCRBY</code> + <code>ZRANGE ... REV LIMIT</code> implementations.</li>
+                <li><strong>Auction/marketplace ending-soonest lists</strong>: eBay's "ending soonest" sort and StockX's live-auction countdown views use the same <code>BYSCORE</code> range-from-now pattern shown here.</li>
+                <li><strong>Most-viewed / trending content</strong>: Reddit's "rising" sort and YouTube's "trending" surfaces are conceptually the same denormalized view-count-to-sorted-set pattern.</li>
+                <li><strong>Author/relationship ordering</strong>: a collaborative platform (like the book-writing example) ranking an author's works by sales or date mirrors LinkedIn ranking a user's posts by engagement, or GitHub ranking a user's repositories by star count.</li>
+                <li><strong>Rate limiting / sliding windows</strong> (a use case not covered in this lecture but worth knowing as a forward pointer): many production rate limiters use sorted sets with timestamps as scores to implement sliding-window request counting — the same <code>BYSCORE</code> range-query mechanics apply.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="java-implementation">Enterprise Java Implementation</h2>
+
+            <h3>Leaderboard-style "most viewed" sorted set alongside item hashes</h3>
+<pre><code>@Service
+public class ItemRankingService {
+
+    private final StringRedisTemplate redisTemplate;
+
+    public ItemRankingService(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
+    private String itemsByViewsKey() {
+        return "items:views";
+    }
+
+    private String itemsByEndingAtKey() {
+        return "items:endingAt";
+    }
+
+    public void initializeItemRanking(String itemId, long endingAtEpochMillis) {
+        // Pipelined: both sorted sets updated in one round trip, mirroring
+        // the course's Promise.all-based batching for the same operation.
+        redisTemplate.executePipelined((RedisCallback&lt;Object&gt;) connection -&gt; {
+            connection.zSetCommands().zAdd(
+                    itemsByViewsKey().getBytes(), 0, itemId.getBytes());
+            connection.zSetCommands().zAdd(
+                    itemsByEndingAtKey().getBytes(), endingAtEpochMillis, itemId.getBytes());
+            return null;
+        });
+    }
+
+    public void recordView(String itemId) {
+        // Companion hash update (HINCRBY) would happen alongside this in the same
+        // pipeline in a full implementation — kept separate here for clarity.
+        redisTemplate.opsForZSet().incrementScore(itemsByViewsKey(), itemId, 1);
+    }
+
+    public Set&lt;String&gt; mostViewedItemIds(int count) {
+        return redisTemplate.opsForZSet()
+                .reverseRange(itemsByViewsKey(), 0, count - 1);
+    }
+
+    public Set&lt;String&gt; itemsEndingSoonest(int offset, int count) {
+        long now = Instant.now().toEpochMilli();
+        return redisTemplate.opsForZSet()
+                .rangeByScore(itemsByEndingAtKey(), now, Double.POSITIVE_INFINITY)
+                .stream()
+                .skip(offset)
+                .limit(count)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        // Note: Spring's rangeByScoreWithLimit(key, min, max, offset, count) is the
+        // more direct equivalent of ZRANGE ... BYSCORE ... LIMIT and should be
+        // preferred over the stream-based skip/limit shown here, which fetches the
+        // full range before slicing client-side — included this way only to make
+        // the BYSCORE + LIMIT mapping explicit.
+    }
+}</code></pre>
+
+            <h3>Hex-ID-as-score conversion (the "convert before storing as a score" trick)</h3>
+<pre><code>public long hexIdToScore(String hexId) {
+    return Long.parseLong(hexId, 16);
+}
+
+public String scoreToHexId(long score) {
+    return Long.toHexString(score);
+}</code></pre>
+
+            <h3>Username → ID lookup via a sorted set (as demonstrated, though a hash would be simpler)</h3>
+<pre><code>@Service
+public class UsernameLookupService {
+
+    private static final String USERNAMES_KEY = "usernames";
+
+    private final StringRedisTemplate redisTemplate;
+
+    public UsernameLookupService(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
+    public void registerUsername(String username, String hexUserId) {
+        double score = Long.parseLong(hexUserId, 16);
+        redisTemplate.opsForZSet().add(USERNAMES_KEY, username, score);
+    }
+
+    public Optional&lt;String&gt; findUserIdByUsername(String username) {
+        Double score = redisTemplate.opsForZSet().score(USERNAMES_KEY, username);
+        if (score == null) {
+            return Optional.empty();
+        }
+        return Optional.of(Long.toHexString(score.longValue()));
+    }
+}</code></pre>
+
+            <p><strong>What this does and why:</strong> <code>opsForZSet().reverseRange</code> maps to <code>ZRANGE ... REV</code> (descending), <code>rangeByScoreWithLimit</code> maps directly to <code>ZRANGE ... BYSCORE ... LIMIT</code>, and <code>incrementScore</code> maps to <code>ZINCRBY</code>. The explicit <code>Long.parseLong(hexId, 16)</code>/<code>Long.toHexString(...)</code> pair is the direct Java equivalent of the JavaScript <code>parseInt(id, 16)</code> conversion shown in the lecture — this is a language-agnostic requirement, not a JavaScript-specific quirk: any strongly or weakly typed client must perform this conversion before a hex-formatted ID can serve as a numeric score.</p>
+
+            <p><strong>Alternative approaches / pitfalls:</strong></p>
+            <ul>
+                <li>Using a plain hash (<code>username → hexId</code>) instead of a sorted set for the username-lookup feature avoids the hex/decimal conversion entirely and is arguably simpler — the lecture uses a sorted set here specifically to demonstrate flexibility, not because it's the objectively best structure for this particular query.</li>
+                <li>A common mistake is fetching an entire <code>BYSCORE</code> range without a <code>LIMIT</code> when only a page of results is needed — this defeats the purpose of pagination and can return far more data than intended for a large sorted set.</li>
+                <li>Forgetting to update <em>both</em> a hash field and its paired sorted-set score when an attribute changes (e.g., incrementing <code>views</code> in the hash but forgetting the parallel <code>ZINCRBY</code>) silently desynchronizes the two representations — exactly the same risk flagged with the like-count denormalization pattern.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="trade-offs">Architectural Trade-Offs</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Approach</th>
+                        <th>Advantages</th>
+                        <th>Disadvantages</th>
+                        <th>Suitable scenarios</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Plain set for a relationship</td>
+                        <td>Simple, cheap membership tests</td>
+                        <td>No inherent ordering</td>
+                        <td>Relationships where order never matters</td>
+                    </tr>
+                    <tr>
+                        <td>Sorted set for a relationship</td>
+                        <td>Ordering "for free" alongside membership</td>
+                        <td>Score must be numeric; slightly more write-side bookkeeping</td>
+                        <td>Any relationship you'll need to rank, paginate, or bound by range</td>
+                    </tr>
+                    <tr>
+                        <td>Hash for username→ID lookup</td>
+                        <td>Simple, no type-conversion friction</td>
+                        <td>N/A for this specific query shape</td>
+                        <td>Direct key lookups by a natural string key</td>
+                    </tr>
+                    <tr>
+                        <td>Sorted set for username→ID lookup (as taught)</td>
+                        <td>Demonstrates sorted-set flexibility; usable if you also need ordering by ID/signup-time</td>
+                        <td>Requires explicit hex↔decimal conversion; more complex than necessary for this exact use case</td>
+                        <td>Mainly pedagogical here; genuinely useful if you also want users ordered by signup sequence</td>
+                    </tr>
+                    <tr>
+                        <td>Index-based <code>ZRANGE</code></td>
+                        <td>Simple "give me elements at these ranks"</td>
+                        <td>Not useful for "everything above/below a threshold" queries</td>
+                        <td>Fixed-position slices (e.g., "always show exactly the top 3")</td>
+                    </tr>
+                    <tr>
+                        <td><code>BYSCORE</code> <code>ZRANGE</code> with <code>LIMIT</code></td>
+                        <td>Threshold- and range-based queries; supports "from now onward" patterns; supports pagination</td>
+                        <td>Slightly more argument complexity</td>
+                        <td>Leaderboards, ending-soonest feeds, any range-bounded query</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <hr>
+
+            <h2 id="complexity">Complexity Analysis</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Command</th>
+                        <th>Time Complexity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>ZADD</code></td>
+                        <td>O(log N) per element</td>
+                    </tr>
+                    <tr>
+                        <td><code>ZSCORE</code></td>
+                        <td>O(1)</td>
+                    </tr>
+                    <tr>
+                        <td><code>ZREM</code></td>
+                        <td>O(log N)</td>
+                    </tr>
+                    <tr>
+                        <td><code>ZINCRBY</code></td>
+                        <td>O(log N)</td>
+                    </tr>
+                    <tr>
+                        <td><code>ZPOPMIN</code> / <code>ZPOPMAX</code></td>
+                        <td>O(log N × count)</td>
+                    </tr>
+                    <tr>
+                        <td><code>ZCARD</code></td>
+                        <td>O(1)</td>
+                    </tr>
+                    <tr>
+                        <td><code>ZCOUNT</code></td>
+                        <td>O(log N + M), M = elements in range</td>
+                    </tr>
+                    <tr>
+                        <td><code>ZRANGE</code> (index or <code>BYSCORE</code>)</td>
+                        <td>O(log N + M), M = elements returned</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <hr>
+
+            <h2 id="mistakes">Common Mistakes</h2>
+            
+            <p><strong>Beginner mistakes</strong></p>
+            <ul>
+                <li>Reversing <code>ZADD</code>'s argument order (member-then-score instead of the correct score-then-member).</li>
+                <li>Forgetting that <code>ZSCORE</code> returns a string over the wire and needs client-side parsing back to a number.</li>
+                <li>Assuming a hex-formatted ID string can be used directly as a sorted-set score without conversion.</li>
+            </ul>
+
+            <p><strong>Intermediate mistakes</strong></p>
+            <ul>
+                <li>Fetching a full <code>BYSCORE</code> range and slicing it in application code instead of using <code>LIMIT</code> — wastes bandwidth and defeats Redis's efficient range-query support.</li>
+                <li>Forgetting <code>LIMIT</code> only applies alongside <code>BYSCORE</code>, not with plain index-based <code>ZRANGE</code>.</li>
+                <li>Updating a denormalized attribute in a hash but forgetting the paired sorted-set update (or vice versa), silently desynchronizing "current state" from "ranking."</li>
+            </ul>
+
+            <p><strong>Production mistakes</strong></p>
+            <ul>
+                <li>Choosing a structurally more complex option (sorted set with type conversion) over a simpler, equally correct one (a hash) without a concrete reason — adds unnecessary conversion logic and failure surface for no query benefit.</li>
+                <li>Not accounting for the (explicitly flagged, not-yet-solved) "count each view exactly once per user" requirement — incrementing a view counter unconditionally on every page load will overcount and needs an additional uniqueness-tracking structure, coming in a later lecture.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="interview-questions">Interview Questions</h2>
+            
+            <p><strong>Basic</strong></p>
+            <ul>
+                <li>What's the fundamental difference between a Redis set and a Redis sorted set?</li>
+                <li>Why must sorted-set scores always be numeric, and what problem can that cause with generated string IDs?</li>
+            </ul>
+
+            <p><strong>Intermediate</strong></p>
+            <ul>
+                <li>Walk through how you'd implement an "ending soonest" feature using a sorted set, including the exact <code>ZRANGE</code> invocation and why each argument is chosen.</li>
+                <li>Why does <code>LIMIT</code> only work in combination with <code>BYSCORE</code> in <code>ZRANGE</code>, and what would go wrong if you tried to paginate a large sorted set without it?</li>
+            </ul>
+
+            <p><strong>Advanced</strong></p>
+            <ul>
+                <li>Design a "most viewed items" feature that keeps a hash's <code>views</code> field and a global sorted set in sync, and explain where you'd use pipelining to keep the two updates atomic-in-practice (acknowledging pipelining alone doesn't guarantee true atomicity).</li>
+                <li>Explain, with an example, why storing a hex-encoded ID as a sorted-set score requires an explicit base conversion, and what would happen if you skipped that step in a loosely-typed language versus a strongly-typed one.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="senior-notes">Senior Engineer Notes</h2>
+            <ul>
+                <li>Any time you catch a design converging on "I need the top/bottom N of some attribute" or "I need everything in this range," that's a sorted set, full stop — resist the temptation to compute rankings in application code from a plain set or list of hashes; Redis's skip-list-backed range queries exist precisely to make this cheap server-side.</li>
+                <li>Keep a running mental checklist for every denormalized attribute (a value duplicated between a hash field and a sorted-set score, or between multiple sorted sets): whenever that attribute changes, is <em>every</em> copy of it updated, ideally in one pipeline? This class of "forgot to update the other copy" bug is easy to introduce and easy to miss in code review unless it's an explicit habit.</li>
+                <li>When a generated ID's <em>representation</em> (hex string) doesn't match the <em>type</em> a Redis structure requires (numeric score), don't paper over it — do the conversion explicitly and name the conversion functions clearly (as shown above), so the next engineer reading the code immediately understands why a base-16/base-10 conversion is happening at all.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="connections">Connections to Previous Topics</h2>
+            <ul>
+                <li>The "top N by attribute" pattern is the direct sorted-set upgrade of the sets lecture's "one set per record" relationship pattern — same idea, now with a meaningful, queryable ordering dimension.</li>
+                <li>The username-uniqueness set from the sets lecture is explicitly noted as now redundant with the new <code>usernames</code> sorted set (which also enforces uniqueness of members, plus adds ID lookup) — the instructor deliberately leaves both in place as a teaching artifact, illustrating that Redis modeling decisions often leave overlapping structures behind as features accrete, and that's an acceptable, conscious trade-off rather than an oversight, as long as it's understood.</li>
+                <li><code>HINCRBY</code>'s atomic single-field update pattern is directly mirrored by <code>ZINCRBY</code>'s atomic single-score update — same underlying "avoid a GET-then-SET race" rationale first introduced with plain <code>INCR</code>.</li>
+                <li>Pipelining (from the hashes section) is reused here to batch the item-hash creation together with both sorted-set insertions (<code>items:views</code> and <code>items:endingAt</code>) into a single round trip — directly extending the earlier <code>getItems</code>-style batching to writes, not just reads.</li>
+                <li>Unix-epoch-millis timestamps (introduced during item serialization) are exactly what make the "ending soonest" sorted set's <code>BYSCORE</code> range query possible — this lecture is the payoff for that earlier design decision.</li>
+            </ul>
+
+            <hr>
+
+            <h2 id="takeaways">Key Takeaways</h2>
+            <ul>
+                <li>A sorted set combines set-like uniqueness with hash-like member→score mapping, and automatically maintains score-based ordering — enabling efficient "top N," "range between X and Y," and "next up from now" queries that plain sets and hashes cannot answer efficiently.</li>
+                <li><code>ZADD</code>'s argument order is score-then-member — a common source of beginner mistakes.</li>
+                <li><code>ZRANGE</code> has two fundamentally different modes (index-based ranks vs. <code>BYSCORE</code> value ranges), each supporting <code>REV</code> (reverse order) and, for <code>BYSCORE</code> only, <code>LIMIT</code> (pagination); <code>WITHSCORES</code> includes scores in the response.</li>
+                <li>Sorted-set scores must be genuine numbers — a hex-encoded ID string must be explicitly converted to base-10 before use as a score, and converted back to hex when read out.</li>
+                <li>The two headline use cases are leaderboard-style "top/bottom N across a hash collection" and "ordered relationships between records" — both typically involve deliberately duplicating an attribute between a hash field and a sorted-set score, kept in sync at write time (ideally pipelined).</li>
+                <li><code>ZRANGE key &lt;now&gt; +inf BYSCORE LIMIT 0 &lt;n&gt;</code> is the general-purpose "first page of what's coming up from this point forward" query pattern, useful for auctions, feeds, and any time-ordered "what's next" feature.</li>
+            </ul>
+        </div>
+    </main>
+
+</body>
+</html>
